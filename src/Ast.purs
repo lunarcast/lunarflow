@@ -7,9 +7,11 @@ module Lunarflow.Ast
   , WithId
   , IndexedLambdaData
   , GroupedLambdaData
+  , AstTerm
   , groupExpression
   , indexExpression
   , mkAst
+  , _term
   ) where
 
 import Prelude
@@ -17,10 +19,14 @@ import Control.Monad.Reader (ReaderT, asks, local, runReaderT)
 import Control.Monad.State (State, evalState, modify)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Lens (Lens')
+import Data.Lens.Iso.Newtype (_Newtype)
+import Data.Lens.Record (prop)
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (maybe)
+import Data.Newtype (class Newtype)
 import Data.Symbol (SProxy(..))
 import Prim.Row as Row
 import Record as Record
@@ -43,13 +49,17 @@ derive instance genericAstChunk :: Generic (AstChunk c l a) _
 instance showAstChunk :: (Show l, Show a, Show c) => Show (AstChunk c l a) where
   show = genericShow
 
+-- | AstChunk with asts as children
+type AstTerm c l r
+  = AstChunk c l (Ast c l r)
+
 -- | Generic Ast type
 -- |
 -- | This is extensible so we don't have to create a different dsl 
 -- | each time we want to augument a tree with new information.
 newtype Ast c l r
   = Ast
-  { term :: AstChunk c l (Ast c l r)
+  { term :: AstTerm c l r
   | r
   }
 
@@ -58,9 +68,18 @@ derive instance genericAst :: Generic (Ast c l r) _
 instance showAst :: (Show l, Show c) => Show (Ast c l r) where
   show (Ast { term }) = genericShow term
 
+derive instance newtypeAst :: Newtype (Ast c l r) _
+
+-- | SProxy for the term prop of asts.
+termProxy :: SProxy "term"
+termProxy = SProxy
+
+_term :: forall c l r. Lens' (Ast c l r) (AstTerm c l r)
+_term = _Newtype <<< prop termProxy
+
 -- | Helper for packing an ast
-mkAst :: forall r l c. Row.Lacks "term" r => AstChunk c l (Ast c l r) -> Record r -> Ast c l r
-mkAst inner = Ast <<< Record.insert (SProxy :: _ "term") inner
+mkAst :: forall r l c. Row.Lacks "term" r => AstTerm c l r -> Record r -> Ast c l r
+mkAst inner = Ast <<< Record.insert termProxy inner
 
 -- | Basic lambda calculus expressions
 type Expression
@@ -75,12 +94,12 @@ type WithId r
 -- | can use to reference that argument (basically removeing the need for shadowing).
 -- | Thre reason we do this instead of changing names to indices is for ease of generating the layouts.
 -- I made this into a separate type because I use it in the GroupedExpression type as well
-type IndexedLambdaData
-  = { argumentName :: String, argumentId :: Int }
+type IndexedLambdaData r
+  = { argumentName :: String, argumentId :: Int | r }
 
 -- | Indexed lambda calculus expressions
 type IndexedAst
-  = Ast Unit IndexedLambdaData
+  = Ast Unit (IndexedLambdaData ())
       (WithId ())
 
 -- | Add incidces for all nodes in an ast
@@ -109,12 +128,12 @@ indexExpression = flip evalState 0 <<< flip runReaderT Map.empty <<< go
   getId = modify ((+) 1)
 
 -- | Data for visually sugared grouped lambdas
-type GroupedLambdaData
-  = ( arguments :: List.List IndexedLambdaData )
+type GroupedLambdaData r
+  = ( arguments :: List.List (IndexedLambdaData r) )
 
 -- | Ast which doesn't allow consecutive lambdas.
 type GroupedExpression
-  = Ast Unit { | GroupedLambdaData } (WithId ())
+  = Ast Unit { | GroupedLambdaData () } (WithId ())
 
 -- | Group multiple consecutive lambdas into 1 as visual sugar.
 -- | This is the textual equivalent of suagring \f. \a. \b. f b a into \f a b. f b a 

@@ -12,7 +12,7 @@ import Control.Plus (empty, (<|>))
 import Data.Array.NonEmpty (some)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either, fromRight)
-import Data.Foldable (foldr)
+import Data.Foldable (foldl, foldr)
 import Data.Foldable as Foldable
 import Data.Identity (Identity)
 import Data.NonEmpty (NonEmpty(..))
@@ -91,8 +91,8 @@ expression' expr = do
     let
       baseAst = mkAst (Lambda arg body) {}
 
-      go = (flip mkAst {} <<< _) <<< Lambda
-    pure $ foldr go baseAst args
+      go = flip $ (flip mkAst {} <<< _) <<< Lambda
+    pure $ foldl go baseAst args
 
 -- | Parser for lambda calculus.
 expression :: LunarflowParser Expression
