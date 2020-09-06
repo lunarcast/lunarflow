@@ -6,8 +6,10 @@ module Lunarflow.Ast
   , GroupedExpression
   , WithId
   , IndexedLambdaData
+  , GroupedLambdaData
   , groupExpression
   , indexExpression
+  , mkAst
   ) where
 
 import Prelude
@@ -25,56 +27,44 @@ import Record as Record
 
 -- | The meat and potatoes of representing an expression.
 -- |
--- | - a represents the type we use as childre.
+-- | - a represents the type we use as children.
 -- | - l represents the type lambdas carry around.
+-- | - c represents the type calls carry around.
 -- | 
 -- | Thre reason we take an argument for a is so we don't have to 
 -- | take an extra type argumet and write `Ast l r` on each occurence. 
-data AstChunk l a
-  = Call a a
+data AstChunk c l a
+  = Call c a a
   | Lambda l a
   | Var String
 
-derive instance genericAstChunk :: Generic (AstChunk l a) _
+derive instance genericAstChunk :: Generic (AstChunk c l a) _
 
-instance showAstChunk :: (Show l, Show a) => Show (AstChunk l a) where
+instance showAstChunk :: (Show l, Show a, Show c) => Show (AstChunk c l a) where
   show = genericShow
 
 -- | Generic Ast type
 -- |
 -- | This is extensible so we don't have to create a different dsl 
 -- | each time we want to augument a tree with new information.
-newtype Ast l r
+newtype Ast c l r
   = Ast
-  { term :: AstChunk l (Ast l r)
+  { term :: AstChunk c l (Ast c l r)
   | r
   }
 
-derive instance genericAst :: Generic (Ast l r) _
+derive instance genericAst :: Generic (Ast c l r) _
 
-instance showAst :: Show l => Show (Ast l r) where
+instance showAst :: (Show l, Show c) => Show (Ast c l r) where
   show (Ast { term }) = genericShow term
 
 -- | Helper for packing an ast
-mkAst :: forall r l. Row.Lacks "term" r => AstChunk l (Ast l r) -> Record r -> Ast l r
+mkAst :: forall r l c. Row.Lacks "term" r => AstChunk c l (Ast c l r) -> Record r -> Ast c l r
 mkAst inner = Ast <<< Record.insert (SProxy :: _ "term") inner
 
 -- | Basic lambda calculus expressions
 type Expression
-  = Ast String ()
-
--- | Basic exmple of how to encode `\a b. a` 
-const' :: Expression
-const' = lambda
-  where
-  lambda :: Expression
-  lambda = mkAst (Lambda "x" lambda') {}
-
-  lambda' :: Expression
-  lambda' = mkAst (Lambda "y" varX) {}
-
-  varX :: Expression
-  varX = mkAst (Var "x") {}
+  = Ast Unit String ()
 
 -- | Basic extensible record for stuff which has an unique id represented as an int.
 type WithId r
@@ -90,7 +80,7 @@ type IndexedLambdaData
 
 -- | Indexed lambda calculus expressions
 type IndexedAst
-  = Ast IndexedLambdaData
+  = Ast Unit IndexedLambdaData
       (WithId ())
 
 -- | Add incidces for all nodes in an ast
@@ -101,7 +91,7 @@ indexExpression = flip evalState 0 <<< flip runReaderT Map.empty <<< go
   go :: Expression -> ReaderT (Map String Int) (State Int) IndexedAst
   go (Ast { term }) = do
     indexed <- case term of
-      Call func argument -> Call <$> go func <*> go argument
+      Call _ func argument -> Call unit <$> go func <*> go argument
       Lambda name body -> do
         argumentId <- getId
         Lambda { argumentName: name, argumentId } <$> local (Map.insert name argumentId) (go body)
@@ -118,9 +108,13 @@ indexExpression = flip evalState 0 <<< flip runReaderT Map.empty <<< go
   -- | Helper for getting a new unique id
   getId = modify ((+) 1)
 
+-- | Data for visually sugared grouped lambdas
+type GroupedLambdaData
+  = ( arguments :: List.List IndexedLambdaData )
+
 -- | Ast which doesn't allow consecutive lambdas.
 type GroupedExpression
-  = Ast { arguments :: List.List IndexedLambdaData } (WithId ())
+  = Ast Unit { | GroupedLambdaData } (WithId ())
 
 -- | Group multiple consecutive lambdas into 1 as visual sugar.
 -- | This is the textual equivalent of suagring \f. \a. \b. f b a into \f a b. f b a 
@@ -133,5 +127,5 @@ groupExpression ast@(Ast astData) = Ast $ astData { term = term }
       _ -> Lambda { arguments: pure lambdaData } nestedAst
       where
       nestedAst@(Ast { term: nestedTerm }) = groupExpression body
-    Call func arg -> Call (groupExpression func) (groupExpression arg)
+    Call _ func arg -> Call unit (groupExpression func) (groupExpression arg)
     Var a -> Var a

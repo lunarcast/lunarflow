@@ -13,6 +13,7 @@ You can edit this file as you like.
   , "record"
   , "transformers"
   , "tuples"
+  , "typelevel-prelude"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
