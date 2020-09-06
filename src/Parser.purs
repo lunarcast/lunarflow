@@ -29,7 +29,7 @@ lambdaStarts = [ "\\", "λ" ]
 
 -- | Punctuation to start the declaration of the body of a lambda expression.
 lambdaBodyStarts :: Array String
-lambdaBodyStarts = [ "\\", "." ]
+lambdaBodyStarts = [ "->", "." ]
 
 -- | Declaration for lambda calculus (with comments).
 -- | This is used to generate the lexer
