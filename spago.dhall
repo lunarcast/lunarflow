@@ -9,6 +9,7 @@ You can edit this file as you like.
   , "free"
   , "generics-rep"
   , "ordered-collections"
+  , "parsing"
   , "psci-support"
   , "record"
   , "transformers"
