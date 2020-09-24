@@ -12,11 +12,11 @@ import Control.Plus (empty, (<|>))
 import Data.Array.NonEmpty (some)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either, fromRight)
-import Data.Foldable (foldl, foldr)
+import Data.Foldable (foldl)
 import Data.Foldable as Foldable
 import Data.Identity (Identity)
 import Data.NonEmpty (NonEmpty(..))
-import Lunarflow.Ast (AstChunk(..), Expression, mkAst)
+import Lunarflow.Ast (AstChunk(..), RawExpression, mkAst)
 import Partial.Unsafe (unsafePartial)
 import Text.Parsing.Parser (ParseError, Parser, ParserT, runParser)
 import Text.Parsing.Parser.Combinators (try)
@@ -59,30 +59,30 @@ type LunarflowParser r
 
 -- | Parser for individual lambda calculus expressions.
 -- | This references itself so we use it within a fixpoint operator
-expression' :: LunarflowParser Expression -> LunarflowParser Expression
+expression' :: LunarflowParser RawExpression -> LunarflowParser RawExpression
 expression' expr = do
   expression'' <- atom
   withCall expression'' <|> pure expression''
   where
   { parens, identifier, reservedOp } = tokenParser
 
-  withCall :: Expression -> LunarflowParser Expression
+  withCall :: RawExpression -> LunarflowParser RawExpression
   withCall expression'' = do
     argument <- try atom
     let
       app = flip mkAst {} $ Call unit expression'' argument
     withCall app <|> pure app
 
-  atom :: LunarflowParser Expression
+  atom :: LunarflowParser RawExpression
   atom = wrapped <|> lambdaExpr <|> variable
 
-  wrapped :: LunarflowParser Expression
+  wrapped :: LunarflowParser RawExpression
   wrapped = parens expr
 
-  variable :: ParserT String Identity Expression
+  variable :: ParserT String Identity RawExpression
   variable = (flip mkAst {} <<< Var) <$> identifier
 
-  lambdaExpr :: ParserT String Identity Expression
+  lambdaExpr :: ParserT String Identity RawExpression
   lambdaExpr = do
     Foldable.oneOf $ reservedOp <$> lambdaStarts
     (NonEmpty arg args) <- NonEmptyArray.toNonEmpty <$> NonEmptyArray.reverse <$> some identifier
@@ -95,17 +95,17 @@ expression' expr = do
     pure $ foldl go baseAst args
 
 -- | Parser for lambda calculus.
-expression :: LunarflowParser Expression
+expression :: LunarflowParser RawExpression
 expression = fix expression'
 
 -- | Try parsing a string into a lambda calculus ast.
-parseLambdaCalculus :: String -> Either ParseError Expression
+parseLambdaCalculus :: String -> Either ParseError RawExpression
 parseLambdaCalculus = flip runParser expression
 
 -- | Partial function I usually use in the repl.
-parseLambdaCalculus' :: Partial => String -> Expression
+parseLambdaCalculus' :: Partial => String -> RawExpression
 parseLambdaCalculus' = fromRight <<< parseLambdaCalculus
 
 -- | Unsafe version of parseLambdaCalculus I usually use for debugging.
-unsafeParseLambdaCalculus :: String -> Expression
+unsafeParseLambdaCalculus :: String -> RawExpression
 unsafeParseLambdaCalculus = unsafePartial parseLambdaCalculus'

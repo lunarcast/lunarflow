@@ -10,15 +10,16 @@ module Lunarflow.Layout
   ) where
 
 import Prelude
-import Control.Monad.Reader (ask, local, runReader)
+import Control.Monad.Reader (ReaderT, ask, local, runReader, runReaderT)
 import Control.Monad.State (State, evalState)
 import Data.List (foldMap)
+import Data.List as Array
 import Data.List as List
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.Ord.Max (Max(..))
 import Data.Symbol (SProxy(..))
-import Lunarflow.Ast (Ast(..), AstChunk(..), GroupedExpression, GroupedLambdaData, WithId, mkAst)
+import Lunarflow.Ast (Ast(..), AstChunk(..), GroupedExpression, GroupedLambdaData, WithId, IndexedVarData, mkAst)
 import Lunarflow.Utils (increase)
 import Record as Record
 import Type.Row (type (+))
@@ -36,14 +37,14 @@ type WithEnd r
 
 -- | A layout which isn't complete yet
 type AstWithStart
-  = Ast { | WithStart () } { | WithStart + GroupedLambdaData () } (WithId ())
+  = Ast (IndexedVarData ()) { | WithStart () } { | WithStart + GroupedLambdaData () } (WithId ())
 
 type AstWithIntervals
-  = Ast { | WithStart () } { | WithStart + GroupedLambdaData (WithEnd ()) } (WithId ())
+  = Ast (IndexedVarData ()) { | WithStart () } { | WithStart + GroupedLambdaData (WithEnd ()) } (WithId ())
 
 -- | Layouts are expressions which have vertical indices for every line.
 type Layout
-  = Ast { | WithStart + WithIndex () } { | WithStart + WithIndex + GroupedLambdaData (WithIndex + WithEnd ()) } (WithId ())
+  = Ast (IndexedVarData ()) { | WithStart + WithIndex () } { | WithStart + WithIndex + GroupedLambdaData (WithIndex + WithEnd ()) } (WithId ())
 
 -- | Sproxy used for adding indices to records.
 _index :: SProxy "index"
@@ -98,15 +99,33 @@ addEnds (Ast ast) =
             pure $ unwrap <$> foldMap (map Max) [ func', arg' ]
         Lambda { start } currentBody -> local (const $ Just start) $ getLastUsage target currentBody
 
-addIndices :: AstWithIntervals -> Layout
-addIndices (Ast { term, id }) =
-  flip mkAst { id } case term of
-    Var name -> Var name
-    Call callData func arg -> Call callData' (addIndices func) (addIndices arg)
-      where
-      callData' = Record.insert _index 0 callData
-    Lambda lambdaData body -> Lambda lambdaData' $ addIndices body
-      where
-      lambdaData' = { arguments, index: 0, start: lambdaData.start }
+type LayoutContext
+  = { hasLine :: Int -> Boolean
+    , height :: Int
+    }
 
-      arguments = flip List.mapWithIndex lambdaData.arguments $ \index a -> Record.insert _index index a
+addIndices :: AstWithIntervals -> Array Layout
+addIndices = flip runReaderT { hasLine: const false, height: 0 } <<< go
+  where
+  go :: AstWithIntervals -> ReaderT LayoutContext Array Layout
+  go (Ast { term, id }) =
+    flip mkAst { id }
+      <$> case term of
+          Var name -> pure $ Var name
+          Call callData func arg -> do
+            func' <- go func
+            arg' <- go arg
+            pure $ Call callData' func' arg'
+            where
+            callData' = Record.insert _index 0 callData
+          Lambda lambdaData body -> Lambda lambdaData' <$> local addData (go body)
+            where
+            addData :: LayoutContext -> LayoutContext
+            addData { hasLine } =
+              { hasLine: \a -> Array.any ((eq a) <<< _.argumentId) arguments || hasLine a
+              , height: Array.length arguments
+              }
+
+            lambdaData' = { arguments, index: 0, start: lambdaData.start }
+
+            arguments = flip List.mapWithIndex lambdaData.arguments $ \index a -> Record.insert _index index a

@@ -1,21 +1,26 @@
 module Lunarflow.Ast
   ( AstChunk(..)
   , Ast(..)
+  , RawExpression
   , Expression
   , IndexedAst
   , GroupedExpression
   , WithId
+  , WithIndex
   , IndexedLambdaData
   , GroupedLambdaData
+  , IndexedVarData
   , AstTerm
   , groupExpression
   , indexExpression
   , mkAst
+  , withDebrujinIndices
+  , printDeBrujin
   , _term
   ) where
 
 import Prelude
-import Control.Monad.Reader (ReaderT, asks, local, runReaderT)
+import Control.Monad.Reader (ReaderT, Reader, asks, local, runReader, runReaderT)
 import Control.Monad.State (State, evalState, modify)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
@@ -23,9 +28,7 @@ import Data.Lens (Lens')
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Lens.Record (prop)
 import Data.List as List
-import Data.Map (Map)
-import Data.Map as Map
-import Data.Maybe (maybe)
+import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (class Newtype)
 import Data.Symbol (SProxy(..))
 import Prim.Row as Row
@@ -36,58 +39,70 @@ import Record as Record
 -- | - a represents the type we use as children.
 -- | - l represents the type lambdas carry around.
 -- | - c represents the type calls carry around.
+-- | - v represents the type variables carry around.
 -- | 
 -- | Thre reason we take an argument for a is so we don't have to 
--- | take an extra type argumet and write `Ast l r` on each occurence. 
-data AstChunk c l a
+-- | take an extra type argumet and write `Ast v c l r` on each occurence. 
+data AstChunk v c l a
   = Call c a a
   | Lambda l a
-  | Var String
+  | Var v
 
-derive instance genericAstChunk :: Generic (AstChunk c l a) _
+derive instance genericAstChunk :: Generic (AstChunk v c l a) _
 
-instance showAstChunk :: (Show l, Show a, Show c) => Show (AstChunk c l a) where
+instance showAstChunk :: (Show c, Show l, Show a, Show v) => Show (AstChunk v c l a) where
   show = genericShow
 
 -- | AstChunk with asts as children
-type AstTerm c l r
-  = AstChunk c l (Ast c l r)
+type AstTerm v c l r
+  = AstChunk v c l (Ast v c l r)
 
 -- | Generic Ast type
 -- |
 -- | This is extensible so we don't have to create a different dsl 
 -- | each time we want to augument a tree with new information.
-newtype Ast c l r
+newtype Ast v c l r
   = Ast
-  { term :: AstTerm c l r
+  { term :: AstTerm v c l r
   | r
   }
 
-derive instance genericAst :: Generic (Ast c l r) _
+derive instance genericAst :: Generic (Ast v c l r) _
 
-instance showAst :: (Show l, Show c) => Show (Ast c l r) where
+instance showAst :: (Show l, Show v, Show c) => Show (Ast v c l r) where
   show (Ast { term }) = genericShow term
 
-derive instance newtypeAst :: Newtype (Ast c l r) _
+derive instance newtypeAst :: Newtype (Ast v c l r) _
 
 -- | SProxy for the term prop of asts.
 termProxy :: SProxy "term"
 termProxy = SProxy
 
-_term :: forall c l r. Lens' (Ast c l r) (AstTerm c l r)
+_term :: forall c l r v. Lens' (Ast v c l r) (AstTerm v c l r)
 _term = _Newtype <<< prop termProxy
 
 -- | Helper for packing an ast
-mkAst :: forall r l c. Row.Lacks "term" r => AstTerm c l r -> Record r -> Ast c l r
+mkAst :: forall v r l c. Row.Lacks "term" r => AstTerm v c l r -> Record r -> Ast v c l r
 mkAst inner = Ast <<< Record.insert termProxy inner
 
 -- | Basic lambda calculus expressions
+type RawExpression
+  = Ast String Unit String ()
+
+-- | We use this type so we keep access to the name of the variables for documentation purpouses.
+type IndexedVarData r
+  = { | WithIndex ( name :: String | r ) }
+
+-- | Lambda calculus expression using de brujin indices.
 type Expression
-  = Ast Unit String ()
+  = Ast (IndexedVarData ()) Unit String ()
 
 -- | Basic extensible record for stuff which has an unique id represented as an int.
 type WithId r
   = ( id :: Int | r )
+
+type WithIndex r
+  = ( index :: Int | r )
 
 -- | Data  carried around by lambdas. 
 -- | The argumentId is an unique code variables 
@@ -99,24 +114,40 @@ type IndexedLambdaData r
 
 -- | Indexed lambda calculus expressions
 type IndexedAst
-  = Ast Unit (IndexedLambdaData ())
+  = Ast (IndexedVarData ()) Unit (IndexedLambdaData ())
       (WithId ())
+
+-- | Add de brujin indices to a lambda calculus expression.
+withDebrujinIndices :: RawExpression -> Expression
+withDebrujinIndices = flip runReader List.Nil <<< go
+  where
+  go :: RawExpression -> Reader (List.List String) Expression
+  go (Ast { term }) =
+    flip mkAst {}
+      <$> case term of
+          Call _ func argument -> Call unit <$> go func <*> go argument
+          Lambda name body -> Lambda name <$> (local (List.Cons name) $ go body)
+          Var name -> do
+            maybeIndex <- asks $ List.findIndex (eq name)
+            pure case maybeIndex of
+              Just index -> Var { index, name }
+              Nothing -> Var { name, index: -1 }
 
 -- | Add incidces for all nodes in an ast
 indexExpression :: Expression -> IndexedAst
-indexExpression = flip evalState 0 <<< flip runReaderT Map.empty <<< go
+indexExpression = flip evalState 0 <<< flip runReaderT List.Nil <<< go
   where
   -- | Internal version of fromExpression which runs in an actual monad
-  go :: Expression -> ReaderT (Map String Int) (State Int) IndexedAst
+  go :: Expression -> ReaderT (List.List Int) (State Int) IndexedAst
   go (Ast { term }) = do
     indexed <- case term of
       Call _ func argument -> Call unit <$> go func <*> go argument
       Lambda name body -> do
         argumentId <- getId
-        Lambda { argumentName: name, argumentId } <$> local (Map.insert name argumentId) (go body)
-      Var name -> pure $ Var name
+        Lambda { argumentName: name, argumentId } <$> local (List.Cons argumentId) (go body)
+      Var data' -> pure $ Var data'
     id <- case term of
-      Var name -> asks (Map.lookup name) >>= maybe getId pure
+      Var { index } -> asks (flip List.index index) >>= maybe getId pure
       _ -> getId
     pure
       $ Ast
@@ -133,7 +164,7 @@ type GroupedLambdaData r
 
 -- | Ast which doesn't allow consecutive lambdas.
 type GroupedExpression
-  = Ast Unit { | GroupedLambdaData () } (WithId ())
+  = Ast (IndexedVarData ()) Unit { | GroupedLambdaData () } (WithId ())
 
 -- | Group multiple consecutive lambdas into 1 as visual sugar.
 -- | This is the textual equivalent of suagring \f. \a. \b. f b a into \f a b. f b a 
@@ -148,3 +179,41 @@ groupExpression ast@(Ast astData) = Ast $ astData { term = term }
       nestedAst@(Ast { term: nestedTerm }) = groupExpression body
     Call _ func arg -> Call unit (groupExpression func) (groupExpression arg)
     Var a -> Var a
+
+--  Pretty printing stuff:
+-- | Check if an ast chunk needs to be wrapped in parenthesis for printing
+needsParenthesis :: forall v c l r. Row.Lacks "term" r => Boolean -> Ast v c l r -> Boolean
+needsParenthesis left (Ast { term }) = go term
+  where
+  go (Lambda _ _) = left
+
+  go (Call _ _ _) = not left
+
+  go _ = false
+
+-- | Add parenthesis around a string
+withParenthesis :: String -> String
+withParenthesis a = "(" <> a <> ")"
+
+-- | Add parenthesis around a string when a condition passes
+parenthesiseWhen :: Boolean -> String -> String
+parenthesiseWhen true = withParenthesis
+
+parenthesiseWhen false = identity
+
+-- | I don't have this on my keyboard so I just made a constant for it.
+lambdaChar :: String
+lambdaChar = "λ"
+
+-- | Print an expression which uses de brujin indices.
+printDeBrujin :: forall v c l r. Row.Lacks "term" r => Ast ({ | WithIndex v }) c l r -> String
+printDeBrujin (Ast { term }) = case term of
+  Var { index } -> show index
+  Lambda _ body -> lambdaChar <> printDeBrujin body
+  Call _ func arg ->
+    parenthesiseWhen (needsParenthesis true func) func'
+      <> parenthesiseWhen (needsParenthesis false arg) arg'
+    where
+    func' = printDeBrujin func
+
+    arg' = printDeBrujin arg
