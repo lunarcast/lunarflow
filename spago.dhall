@@ -1,6 +1,7 @@
 { name = "lunarflow"
 , dependencies =
   [ "console"
+  , "debug"
   , "effect"
   , "free"
   , "generics-rep"
