@@ -12,6 +12,7 @@
   , "record"
   , "transformers"
   , "tuples"
+  , "type-equality"
   , "typelevel-prelude"
   , "undefined"
   ]

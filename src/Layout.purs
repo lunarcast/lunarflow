@@ -18,9 +18,7 @@ import Data.Maybe (Maybe(..))
 import Data.Set as Set
 import Data.Symbol (SProxy(..))
 import Debug.Trace (traceM)
-import Lunarflow.Ast (Ast(..), GroupedLambdaData, GroupedExpression)
-import Record as Record
-import Type.Row (type (+))
+import Lunarflow.Ast (Ast(..), Expression)
 
 -- | Extensible record for asts which horizontally index all the lines.
 type WithIndex r
@@ -28,7 +26,7 @@ type WithIndex r
 
 -- | Layouts are expressions which have vertical indices for every line.
 type Layout
-  = Ast Int { | WithIndex () } { | WithIndex + GroupedLambdaData (WithIndex ()) }
+  = Ast Int { | WithIndex () } { | WithIndex () }
 
 -- | Sproxy used for adding indices to records.
 _index :: SProxy "index"
@@ -47,32 +45,29 @@ type LayoutM a
   = ReaderT LayoutContext (ListT.ListT (State LayoutState)) a
 
 -- | Generate a layout from an ast.
-addIndices :: GroupedExpression -> LayoutM Layout
+addIndices :: Expression -> LayoutM Layout
 addIndices = go
   where
   -- | Check if a var is used in a certain expression
-  hasVar :: Int -> GroupedExpression -> Boolean
+  hasVar :: Int -> Expression -> Boolean
   hasVar target = case _ of
     Var value -> value == target
     Call _ function argument -> hasVar target function || hasVar target argument
-    Lambda { arguments } body -> hasVar (List.length arguments) body
+    Lambda _ body -> hasVar (target + 1) body
 
   -- | Get all the vars referenced in a given expression.
-  usedVars :: GroupedExpression -> Set.Set Int
+  usedVars :: Expression -> Set.Set Int
   usedVars = case _ of
     Var value -> Set.singleton value
     Call _ function argument -> usedVars function `Set.union` usedVars argument
-    Lambda { arguments } body -> Set.mapMaybe mapVar (usedVars body)
+    Lambda _ body -> Set.mapMaybe mapVar (usedVars body)
       where
       mapVar :: Int -> Maybe Int
-      mapVar a
-        | a < argCount = Nothing
-        | otherwise = Just (a - argCount)
+      mapVar 0 = Nothing
 
-      argCount :: Int
-      argCount = List.length arguments
+      mapVar a = Just (a - 1)
 
-  go :: GroupedExpression -> LayoutM Layout
+  go :: Expression -> LayoutM Layout
   go = case _ of
     Var name -> pure $ Var name
     Call _ func arg -> do
@@ -85,9 +80,7 @@ addIndices = go
       callData = { index: 0 }
 
       inArg = usedVars arg
-    Lambda lambdaData body -> Lambda { arguments, index: 0 } <$> go body
-      where
-      arguments = flip List.mapWithIndex lambdaData.arguments \index arg -> Record.insert _index index arg
+    Lambda _ body -> Lambda { index: 0 } <$> go body
 
 -- | Run the computations represented by a LayoutM monad.
 runLayoutM :: forall a. LayoutM a -> List.List a
