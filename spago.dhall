@@ -1,6 +1,7 @@
 { name = "lunarflow"
 , dependencies =
   [ "console"
+  , "data-default"
   , "debug"
   , "effect"
   , "free"
