@@ -11,6 +11,7 @@
   , "profunctor-lenses"
   , "psci-support"
   , "record"
+  , "strings"
   , "transformers"
   , "tuples"
   , "type-equality"

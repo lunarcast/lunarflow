@@ -5,6 +5,7 @@ module Lunarflow.Ast
   , WithIndex
   , withDebrujinIndices
   , printDeBrujin
+  , collectLambdas
   ) where
 
 import Prelude
@@ -13,6 +14,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.List as List
 import Data.Maybe (Maybe(..))
+import Data.Tuple (Tuple(..))
 
 -- | The meat and potatoes of representing an expression.
 -- |
@@ -26,13 +28,12 @@ data Ast v c l
 
 derive instance genericAst :: Generic (Ast v c l) _
 
-instance showDeBrujinAst :: Show (Ast Int c l) where
-  show = printDeBrujin
-else instance showAst :: (Show v, Show c, Show l) => Show (Ast v c l) where
-  show = genericShow
+-- instance showDeBrujinAst :: Show (Ast Int c l) where
+--   show = printDeBrujin
+-- else
+instance showAst :: (Show v, Show c, Show l) => Show (Ast v c l) where
+  show a = genericShow a
 
--- else instance showAst :: (Show c, Show l, Show v) => Show (Ast v c l) where
---   show a = genericShow a
 -- | Basic lambda calculus expressions
 type RawExpression
   = Ast String Unit String
@@ -92,3 +93,11 @@ printDeBrujin = case _ of
     func' = printDeBrujin func
 
     arg' = printDeBrujin arg
+
+-- | Collect consecutive lambdas into a list and return it alongside the deepest body.
+collectLambdas :: forall c l v. Ast v c l -> (Tuple (List.List l) (Ast v c l))
+collectLambdas = case _ of
+  Lambda data' body -> Tuple (List.Cons data' data'') body'
+    where
+    (Tuple data'' body') = collectLambdas body
+  other -> Tuple List.Nil other

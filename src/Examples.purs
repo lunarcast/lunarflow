@@ -8,7 +8,7 @@ import Lunarflow.Parser (unsafeParseLambdaCalculus)
 
 -- | Basic exmple of how to encode `\a b. a` 
 const' :: RawExpression
-const' = unsafeParseLambdaCalculus "\\a b -> a"
+const' = unsafeParseLambdaCalculus """\a b -> a"""
 
 flip' :: RawExpression
-flip' = unsafeParseLambdaCalculus "\\f a b -> f b a"
+flip' = unsafeParseLambdaCalculus """\f a b -> f b a"""
