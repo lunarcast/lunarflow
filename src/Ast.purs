@@ -3,18 +3,19 @@ module Lunarflow.Ast
   , RawExpression
   , Expression
   , WithIndex
+  , GroupedExpression
   , withDebrujinIndices
   , printDeBrujin
-  , collectLambdas
+  , groupExpression
   ) where
 
 import Prelude
 import Control.Monad.Reader (Reader, asks, local, runReader)
+import Data.Debug (class Debug, genericDebug)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.List as List
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..))
 
 -- | The meat and potatoes of representing an expression.
 -- |
@@ -33,6 +34,9 @@ derive instance genericAst :: Generic (Ast v c l) _
 -- else
 instance showAst :: (Show v, Show c, Show l) => Show (Ast v c l) where
   show a = genericShow a
+
+instance debugAst :: (Debug v, Debug c, Debug l) => Debug (Ast v c l) where
+  debug a = genericDebug a
 
 -- | Basic lambda calculus expressions
 type RawExpression
@@ -58,6 +62,17 @@ withDebrujinIndices = flip runReader List.Nil <<< go
       pure case maybeIndex of
         Just index -> Var index
         Nothing -> Var (-1)
+
+type GroupedExpression
+  = Ast Int Unit (List.List String)
+
+groupExpression :: Expression -> GroupedExpression
+groupExpression = case _ of
+  Call data' a b -> Call data' (groupExpression a) (groupExpression b)
+  Var data' -> Var data'
+  Lambda name body -> case groupExpression body of
+    Lambda data' body' -> Lambda (data' `List.snoc` name) body'
+    body' -> Lambda (List.singleton name) body'
 
 --  Pretty printing stuff:
 -- | Check if an ast chunk needs to be wrapped in parenthesis for printing
@@ -93,11 +108,3 @@ printDeBrujin = case _ of
     func' = printDeBrujin func
 
     arg' = printDeBrujin arg
-
--- | Collect consecutive lambdas into a list and return it alongside the deepest body.
-collectLambdas :: forall c l v. Ast v c l -> (Tuple (List.List l) (Ast v c l))
-collectLambdas = case _ of
-  Lambda data' body -> Tuple (List.Cons data' data'') body'
-    where
-    (Tuple data'' body') = collectLambdas body
-  other -> Tuple List.Nil other

@@ -3,6 +3,7 @@
   [ "console"
   , "data-default"
   , "debug"
+  , "debugged"
   , "effect"
   , "free"
   , "generics-rep"
