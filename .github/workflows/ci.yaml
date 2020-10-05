@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # SETUP
+      - uses: actions/checkout@v2
+
+      - uses: thomashoneyman/setup-purescript@main
+        with:
+          purescript: "0.13.8"
+          spago: "0.15.3"
+          zephyr: "0.3.2"
+
+      - name: Cache PureScript dependencies
+        uses: actions/cache@v2
+        with:
+          key: ${{ runner.os }}-spago-${{ hashFiles('**/*.dhall') }}
+          path: |
+            .spago
+            output
+      - uses: actions/setup-node@v1
+        with:
+          node-version: "12.x"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v1.2.0
+        with:
+          version: 4.11.1
+
+      - name: Cache node modules
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-node-modules
+        with:
+          # cache the pnpm store
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+      - name: Install pnpm dependencies
+        run: pnpm install
+
+      # BUILD
+      - name: Build source
+        run: spago build
+
+      # TEST
+      - name: Run tests
+        run: spago test --no-install
+
+      # DEPLOY
+      - name: Run bundle
+        run: npm run bundle
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: yarn semantic-release

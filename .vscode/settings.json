@@ -3,11 +3,14 @@
         "Lunarflow",
         "codegen",
         "corefn",
+        "dhall",
         "esbuild",
         "outdir",
+        "peaceiris",
         "pnpm",
         "purescript",
         "purs",
-        "spago"
+        "spago",
+        "thomashoneyman"
     ]
 }
