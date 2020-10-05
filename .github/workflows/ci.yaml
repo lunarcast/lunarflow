@@ -59,7 +59,7 @@ jobs:
 
       # DEPLOY
       - name: Run bundle
-        run: npm run bundle
+        run: pnpm build
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
