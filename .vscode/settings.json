@@ -1,5 +1,11 @@
 {
     "cSpell.words": [
-        "Lunarflow"
+        "Lunarflow",
+        "esbuild",
+        "outdir",
+        "pnpm",
+        "purescript",
+        "purs",
+        "spago"
     ]
 }

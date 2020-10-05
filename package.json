@@ -1,0 +1,20 @@
+{
+  "name": "lunarflow",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "spago test",
+    "watch": "cd dist && live-server --entry-file=index.html",
+    "dev": "pnpm run prepare-build && nodemon & pnpm run watch",
+    "build": "pnpm run bundle:purescript && pnpm run bundle:js",
+    "build:js": "esbuild --outdir=dist public/entry.js --bundle",
+    "bundle:js": "pnpm run build:js -- --minify --define:production=true",
+    "bundle:purescript": "spago bundle-app --to dist/app.js",
+    "prepare-build": "mkdir dist && cp public/index.html dist/index.html",
+    "postinstall": "spago build -d"
+  },
+  "devDependencies": {
+    "esbuild": "^0.7.9",
+    "live-server": "^1.2.1",
+    "nodemon": "^2.0.4"
+  }
+}
