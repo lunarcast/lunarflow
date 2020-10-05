@@ -6,11 +6,12 @@
     "watch": "cd dist && live-server --entry-file=index.html",
     "dev": "pnpm run prepare-build && nodemon & pnpm run watch",
     "build": "pnpm run prepare-build && pnpm run bundle:purescript && pnpm run dce && pnpm run bundle:js",
+    "postbuild": "cp dist/index.html dist/404.html",
     "build:js": "esbuild --outdir=dist public/entry.js --bundle",
     "bundle:js": "pnpm run build:js -- --minify --define:production=true",
     "bundle:purescript": "spago build --purs-args '--codegen corefn'",
     "dce": "zephyr -f Main.main",
-    "prepare-build": "mkdir dist && cp public/index.html dist/index.html",
+    "prepare-build": "rm -rf dist && mkdir dist && cp public/index.html dist/index.html",
     "postinstall": "spago build -d"
   },
   "devDependencies": {
