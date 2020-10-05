@@ -5,7 +5,7 @@
     "test": "spago test",
     "watch": "cd dist && live-server --entry-file=index.html",
     "dev": "pnpm run prepare-build && nodemon & pnpm run watch",
-    "build": "pnpm run bundle:purescript && pnpm run dce && pnpm run bundle:js",
+    "build": "pnpm run prepare-build && pnpm run bundle:purescript && pnpm run dce && pnpm run bundle:js",
     "build:js": "esbuild --outdir=dist public/entry.js --bundle",
     "bundle:js": "pnpm run build:js -- --minify --define:production=true",
     "bundle:purescript": "spago build --purs-args '--codegen corefn'",
