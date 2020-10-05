@@ -4,6 +4,10 @@ Tool for beginners to learn lambda calculus using an intuitive (or so I hope) vi
 
 This is still in a super early stage, so maybe start this repo and come back in a few months :D
 
+Try it out [here](https://lunarcast.github.io/lunarflow).
+
+> This project is in such an early stage that link probably leads to a blank page.
+
 ## Setup
 
 - Clone the repo
