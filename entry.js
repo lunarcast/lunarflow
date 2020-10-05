@@ -1,0 +1,1 @@
+(()=>{var o=(r,e)=>()=>(e||(e={exports:{}},r(e.exports,e)),e.exports);var i=o(n=>{"use strict";n.log=function(r){return function(){return console.log(r),{}}}});var s=o((d,t)=>{"use strict";var a=i();t.exports={log:a.log}});var l=o((v,u)=>{"use strict";var c=s(),f=c.log("hello world");u.exports={main:f}});l().main();})();
