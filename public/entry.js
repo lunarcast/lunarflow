@@ -1,5 +1,5 @@
 if (production) {
-  require("../dist/bundle");
+  require("../dce-output/Main").main();
 } else {
   require("../output/Main").main();
 }

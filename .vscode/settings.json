@@ -1,6 +1,8 @@
 {
     "cSpell.words": [
         "Lunarflow",
+        "codegen",
+        "corefn",
         "esbuild",
         "outdir",
         "pnpm",
