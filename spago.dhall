@@ -1,4 +1,4 @@
-let client = ./packages/core/spago.dhall
+let client = ./packages/client/spago.dhall
 
 let overrides = { sources = [ "packages/client/src/**/*.purs" ] }
 
