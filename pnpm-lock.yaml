@@ -1,3 +1,6 @@
+dependencies:
+  '@thi.ng/geom': 1.13.0
+  '@thi.ng/hiccup-canvas': 1.1.10
 devDependencies:
   '@semantic-release/changelog': 5.0.1_semantic-release@17.1.2
   '@semantic-release/git': 9.0.0_semantic-release@17.1.2
@@ -280,6 +283,315 @@ packages:
       node: '>=6'
     resolution:
       integrity: sha512-XIB2XbzHTN6ieIjfIMV9hlVcfPU26s2vafYWQcZHWXHOxiaRZYEDKEwdl129Zyg50+foYV2jCgtrqSA6qNuNSA==
+  /@thi.ng/api/6.13.1:
+    dependencies:
+      tslib: 2.0.3
+    dev: false
+    resolution:
+      integrity: sha512-JBdu+8WE6gzOHD4jht4w0Pq2AW+w82umvCdu+NRTuQaKUaTc26+RS9yfIwArPIlu/L33LtLZKqAeAyBp5J4wLA==
+  /@thi.ng/arrays/0.8.1:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/compare': 1.3.17
+      '@thi.ng/equiv': 1.0.32
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/random': 2.0.2
+    dev: false
+    resolution:
+      integrity: sha512-4IiJQBUlRbktuwb6lwWB5TqbILhQJoOl8F6o/H9RetxTluKb5zk26Sx8FnWyChhw4WYg4DcRFuVjlh1sGKFXsg==
+  /@thi.ng/binary/2.0.16:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      tslib: 2.0.3
+    dev: false
+    resolution:
+      integrity: sha512-hZICZFNW97Ei6zVU+U6T+MEEKhlaof708G6Iz6cFnzGsQ5aDgF5rfOXi9SMm85w4n13/GacTqitLou/RAajY9Q==
+  /@thi.ng/checks/2.7.9:
+    dependencies:
+      tslib: 2.0.3
+    dev: false
+    resolution:
+      integrity: sha512-567eiffVTkgL1gu2BLgPivLQdW9Pd4RuwqK76Z69OyhSiEHMcWuBWyPn0fkA4CSasUHteuecGfVeNoUPYCoyVQ==
+  /@thi.ng/color/1.2.18:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/compose': 1.4.18
+      '@thi.ng/defmulti': 1.2.26
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/strings': 1.10.0
+      '@thi.ng/transducers': 7.4.0
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-2G8BfIcYaamL4pFDxZjZkVYx9ugImRKWcBrN9R1sHT3INJ6af00+CqwEeJWElGVJDakzOLAPWyxthQr50q/fvA==
+  /@thi.ng/compare/1.3.17:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+    dev: false
+    resolution:
+      integrity: sha512-eZ3TL0t11QReUHsd4H2/Ug95POKDlvQfyVaOkM60g5xn3w4VCx+unjXbX38ZDM3BI8jSbc4Hq25z+7XgAAIbog==
+  /@thi.ng/compose/1.4.18:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/errors': 1.2.22
+    dev: false
+    resolution:
+      integrity: sha512-zgR7Jg91zBQSYT3sboFU205Kv7g8xwuATjbh7ow4ivJyaGKxQD34sRofb4n0viHStsG5GRi7kGzvgqyLHCtjQQ==
+  /@thi.ng/defmulti/1.2.26:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/errors': 1.2.22
+    dev: false
+    resolution:
+      integrity: sha512-pFWVh9+qe2qE9AF2RyA/LZBXvtqE1mhL+JQ1abEo5p7z7tW0VlSyrE0GskyUrlrEC5cC5oZJLCr7OyMrReDTtQ==
+  /@thi.ng/equiv/1.0.32:
+    dev: false
+    resolution:
+      integrity: sha512-Zi4A/f2Ff5o8OqAmGKmpvv3dhIoA4K7oNjD5KUINqdJ+ZDZbuesvyticqHlqmNdvZZbuawsr+XBeIqaNHdIJUA==
+  /@thi.ng/errors/1.2.22:
+    dependencies:
+      tslib: 2.0.3
+    dev: false
+    resolution:
+      integrity: sha512-MzkVEhVEHj9TJEDEt+ZLHZP5kJ51vBMQ/j0vofke3kcUXP+LGzdbb+TQ2DY5yLOtqCj8kFGStlMcHYeNupd/Dg==
+  /@thi.ng/geom-api/1.1.1:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-d/KtrUVotFyNfilZ5ul3vEGpBK5W5294ZY/VUm09AE4BPMqbiivmn6r0we+uEWi+2fQVoZ2Jjk75W8pJ5eay7A==
+  /@thi.ng/geom-arc/0.3.14:
+    dependencies:
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/geom-resample': 0.2.47
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-YizHuyxCx9N8QPt7H2a2Et7aMbl7Kf5m2abEhcRxIbEeJb4DdtYGVwW/6oNfcYjwhjwLfkcOvR02ak6GAN4aaw==
+  /@thi.ng/geom-clip-line/1.2.10:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/geom-isec': 0.6.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-jcwPst2lz1k+CBjCsWh75+CEUJqXJ5ptyKMmNuS4IVZaYhAtqUM3VBr0d/PsMnAlOGOX+SgYB85immBo69PGlQ==
+  /@thi.ng/geom-clip-poly/1.0.35:
+    dependencies:
+      '@thi.ng/geom-isec': 0.6.1
+      '@thi.ng/geom-poly-utils': 0.1.66
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-yyKQY08tI7uI+Qdvt+J1CtnZ6SRKLNE4V5c9GvzyQ25gjAOC0abqdY5HXyN347lAWhvJEUB0yu7sLOKuYjjUCw==
+  /@thi.ng/geom-closest-point/0.5.1:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-KOifxLiHPRlft0lJ7dRWrBeLkKHCd6rofXlbLfXsJRKUC1PwC4+WUwvYkvNYEgvzWaTN/OEIJGqw8WZ8hjqgFg==
+  /@thi.ng/geom-hull/0.0.67:
+    dependencies:
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-iGeax6VeKxqSy17whBgDub/v1oytIKIBAGhkBUCv5tKv/x7QNhuorcsTDHFAsJXF/yU+hYEvzNzanf+D+tQU/A==
+  /@thi.ng/geom-isec/0.6.1:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/geom-closest-point': 0.5.1
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-sKl/wjqCh1/LgP9oslA1qTawYRTBuioNzyD6ZKS8Ta7lZCUZgIAOe30xskG+2JV+yD39uU8iVenGGCEMUtmJHg==
+  /@thi.ng/geom-poly-utils/0.1.66:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-AFfT8BpGoLJnDuhhYp8NRGcdCChoqD+JuFtv3LdjQxGIXFBOswRaOhtS5YxSVOzCUybTAj5OJv/XEJqjq7UU4g==
+  /@thi.ng/geom-resample/0.2.47:
+    dependencies:
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/geom-closest-point': 0.5.1
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-RhD3xPpsbyUhZUmrArJb9hraGvr0q2qibDlaoVG/t4lq0n97wROGoteobpoFFWojsLyf1mlQAkJdnYJ2hUIjog==
+  /@thi.ng/geom-splines/0.5.34:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/geom-arc': 0.3.14
+      '@thi.ng/geom-resample': 0.2.47
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-OFlR/fSBVXrhcm2AXbCiqrJsxo4O06VwP2HWsGEX+2/oh3AnE/gkoNC0KSInacAKuITB7rZv7VF9lqUy13ceIw==
+  /@thi.ng/geom-subdiv-curve/0.1.64:
+    dependencies:
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/transducers': 7.4.0
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-2BOx3fRFKouQqkHScFYuLiWDSV5E8Peghki/PbywhzT//egLfR4EQaOmXekOdXyaF/jm4b4TqJG/cIVR0W0UPw==
+  /@thi.ng/geom-tessellate/0.2.48:
+    dependencies:
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/geom-isec': 0.6.1
+      '@thi.ng/geom-poly-utils': 0.1.66
+      '@thi.ng/transducers': 7.4.0
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-0oxR01Dd8zdH3gE0Pr0ZBtM7IxieaMYcxVX0QL4Arwz82VvSnoGJvL2yaPhTkMtx+5hUTKjhg0j3LLWTkQ/HOg==
+  /@thi.ng/geom/1.13.0:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/arrays': 0.8.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/defmulti': 1.2.26
+      '@thi.ng/equiv': 1.0.32
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/geom-api': 1.1.1
+      '@thi.ng/geom-arc': 0.3.14
+      '@thi.ng/geom-clip-line': 1.2.10
+      '@thi.ng/geom-clip-poly': 1.0.35
+      '@thi.ng/geom-closest-point': 0.5.1
+      '@thi.ng/geom-hull': 0.0.67
+      '@thi.ng/geom-isec': 0.6.1
+      '@thi.ng/geom-poly-utils': 0.1.66
+      '@thi.ng/geom-resample': 0.2.47
+      '@thi.ng/geom-splines': 0.5.34
+      '@thi.ng/geom-subdiv-curve': 0.1.64
+      '@thi.ng/geom-tessellate': 0.2.48
+      '@thi.ng/hiccup': 3.6.1
+      '@thi.ng/hiccup-svg': 3.6.2
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/matrices': 0.6.34
+      '@thi.ng/random': 2.0.2
+      '@thi.ng/strings': 1.10.0
+      '@thi.ng/transducers': 7.4.0
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-cpCffNQ24SYSnlvpgMPuM1p953jqrcZUmIvxfT07bxWjz2VdG4yTBNsMk4TtO/UE08lm63/0imVO+7RN86Tltg==
+  /@thi.ng/hiccup-canvas/1.1.10:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/color': 1.2.18
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-zbXsaG3VKnIURrNeNBgZbLHsu+D5HJVtG5hBJ0yrYTqM7ujMZxqIg4capRdudrVYZgR1uzHNBQkdqb6MKGyqUQ==
+  /@thi.ng/hiccup-svg/3.6.2:
+    dependencies:
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/color': 1.2.18
+      '@thi.ng/prefixes': 0.1.6
+    dev: false
+    resolution:
+      integrity: sha512-huZuavJQz9s3vNRUM+zz1u/LZl5s20B96/wE+HkQLtn0v10+ZjeShz3B9eOAJmbUre71/eYQi9U4HWvTfoNVFA==
+  /@thi.ng/hiccup/3.6.1:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/prefixes': 0.1.6
+    dev: false
+    resolution:
+      integrity: sha512-wfGt8A6Qck9WUc9//Y/Yh5CFaeMq1Fxixz2/JKEzZ/u3dDM0lUH4Cby9wRe6VaTpP9wR4Q+dCojLLg5cw6xrHw==
+  /@thi.ng/math/2.1.1:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+    dev: false
+    resolution:
+      integrity: sha512-O9JvH+2dF+jH4GLSgQVsTiaYBe0lo6kaq0t4yqUBLUCzGJit52Glhum+qfXYNhmKvfN6fsdS7scdsZC5DvjpTA==
+  /@thi.ng/matrices/0.6.34:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/vectors': 4.7.0
+    dev: false
+    resolution:
+      integrity: sha512-T8EWfhG/sY6jbAPv+McT4FNqBNSVZLAYGzAMdwq11trFnH7aDZnwM9JoQjiq7IlZHKO4+Kcs02X5Ga/fOdaqyw==
+  /@thi.ng/memoize/2.1.3:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+    dev: false
+    resolution:
+      integrity: sha512-MA4x0AZh5+T4wLEyiaWnr3cIIDi8UWFG9sw6jyCpnYwzdHswqpk2QP2a1e7JRgpPOD4Ybxv+aVXLHDmfs9/Zdg==
+  /@thi.ng/prefixes/0.1.6:
+    dev: false
+    resolution:
+      integrity: sha512-+jLTVrS9QzHnLrATQc7CiDSKLw7clvZZQssG+P9vVbsPmEGndMhEaCf655VbxIyVPPuYQgrR4eDCITNktRea8A==
+  /@thi.ng/random/2.0.2:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/checks': 2.7.9
+    dev: false
+    resolution:
+      integrity: sha512-Ce1B2U9GDkQBV2NPDqJ36Gqop96luKjOHFJkgdb9VqHgKjij519UCunjNdcfZWlUWo49HVByp+H4XiwSx7HIeQ==
+  /@thi.ng/strings/1.10.0:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/memoize': 2.1.3
+    dev: false
+    resolution:
+      integrity: sha512-yK8MpHJ0UCfr+vvZL9VPJftS4CpmguYEiGZy+d30eBou5MzbKRuyhN/zwpLkfK58tQQdoc2NGIT+87jVzlz8vA==
+  /@thi.ng/transducers/7.4.0:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/arrays': 0.8.1
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/compare': 1.3.17
+      '@thi.ng/compose': 1.4.18
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/random': 2.0.2
+    dev: false
+    resolution:
+      integrity: sha512-mom1Tpmhv+7kTqEpR8BOdISSygIHQmcIZYc7pq5a8enW5gjrSdKqKLrZZY4/+g3Ih4LSipnZ+avIr7m/pdV6Cg==
+  /@thi.ng/vectors/4.7.0:
+    dependencies:
+      '@thi.ng/api': 6.13.1
+      '@thi.ng/binary': 2.0.16
+      '@thi.ng/checks': 2.7.9
+      '@thi.ng/equiv': 1.0.32
+      '@thi.ng/errors': 1.2.22
+      '@thi.ng/math': 2.1.1
+      '@thi.ng/memoize': 2.1.3
+      '@thi.ng/random': 2.0.2
+      '@thi.ng/transducers': 7.4.0
+    dev: false
+    resolution:
+      integrity: sha512-1yPFWmSXTK05R7VpdzdJOYJEzDrQ5/mhHkr7qIHKVOI/IhwSpYkXGumuHIuVzgaXJmpW48P50U7nvVIUxheG8g==
   /@tootallnate/once/1.1.2:
     dev: true
     engines:
@@ -3799,6 +4111,10 @@ packages:
       node: '>=0.10.0'
     resolution:
       integrity: sha1-n5up2e+odkw4dpi8v+sshI8RrbM=
+  /tslib/2.0.3:
+    dev: false
+    resolution:
+      integrity: sha512-uZtkfKblCEQtZKBF6EBXVZeQNl82yqtDQdv+eck8u7tdPxjLu2/lp5/uPW+um2tpuxINHWy3GhiccY7QgEaVHQ==
   /type-fest/0.11.0:
     dev: true
     engines:
@@ -4115,6 +4431,8 @@ packages:
 specifiers:
   '@semantic-release/changelog': ^5.0.1
   '@semantic-release/git': ^9.0.0
+  '@thi.ng/geom': ^1.13.0
+  '@thi.ng/hiccup-canvas': ^1.1.10
   esbuild: ^0.7.9
   live-server: ^1.2.1
   nodemon: ^2.0.4

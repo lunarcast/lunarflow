@@ -30,5 +30,6 @@ let packages =
       upstream
       with lunarflow-utils = ./packages/utils/spago.dhall as Location
       with lunarflow-core = ./packages/core/spago.dhall as Location
+      with lunarflow-geometry = ./packages/geometry/spago.dhall as Location
 
 in  packages ⫽ overrides ⫽ additions

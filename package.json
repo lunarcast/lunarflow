@@ -21,5 +21,9 @@
     "live-server": "^1.2.1",
     "nodemon": "^2.0.4",
     "semantic-release": "^17.1.2"
+  },
+  "dependencies": {
+    "@thi.ng/geom": "^1.13.0",
+    "@thi.ng/hiccup-canvas": "^1.1.10"
   }
 }
