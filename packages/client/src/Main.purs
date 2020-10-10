@@ -2,8 +2,8 @@ module Main where
 
 import Prelude
 import Effect (Effect)
-import Effect.Console (log)
+import Effect.Console as Console
 
 main :: Effect Unit
 main = do
-  log "hello world"
+  Console.log "hello world"

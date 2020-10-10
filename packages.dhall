@@ -8,11 +8,11 @@ let additions =
         { dependencies =
           [ "prelude"
           , "console"
-          , "strings"
           , "ordered-collections"
           , "either"
           , "tuples"
           , "lists"
+          , "strings"
           , "arrays"
           , "bifunctors"
           , "record"
@@ -26,4 +26,9 @@ let additions =
         }
       }
 
-in  upstream ⫽ overrides ⫽ additions
+let packages =
+      upstream
+      with lunarflow-utils = ./packages/utils/spago.dhall as Location
+      with lunarflow-core = ./packages/core/spago.dhall as Location
+
+in  packages ⫽ overrides ⫽ additions

@@ -13,14 +13,11 @@ import Effect.Console as Console
 increase :: State Int Int
 increase = modify ((+) 1)
 
+-- | Basically mapping with indices and saving them.
 indexed :: forall a. List.List a -> List.List (Tuple Int a)
-indexed = go 0
-  where
-  go _ List.Nil = List.Nil
+indexed = List.mapWithIndex Tuple
 
-  go x (List.Cons head tail) = List.Cons (Tuple x head) $ go (x + 1) tail
-
--- | A debug instance which shows enough context to be useful for zippers.
+-- | A debug instance which shows more context.
 -- | At repl, call `:print Lunarflow.Utils.myDebug`
 myDebug :: forall d. Debug d => d -> Effect Unit
 myDebug = Console.log <<< prettyPrintWith { compactThreshold: 6, maxDepth: Just 1000 } <<< debug
