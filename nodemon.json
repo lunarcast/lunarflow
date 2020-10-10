@@ -1,6 +1,6 @@
 {
   "$schema": "http://json.schemastore.org/nodemon",
   "exec": "pnpm run build:js -- --define:production=false",
-  "watch": ["src"],
+  "watch": ["packages/*/src/**"],
   "ext": "purs"
 }
