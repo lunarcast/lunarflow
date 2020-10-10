@@ -15,8 +15,10 @@
   , "undefined"
   , "effect"
   , "console"
+  , "canvas"
   , "lunarflow-utils"
   , "lunarflow-core"
+  , "lunarflow-geometry"
   ]
 , packages = ../../packages.dhall
 , sources = [ "./src/**/*.purs" ]
