@@ -2,7 +2,7 @@
   "name": "lunarflow",
   "version": "0.0.0",
   "scripts": {
-    "test": "echo \"No tests yet :(\"",
+    "test": "spago test",
     "watch": "cd dist && live-server --entry-file=index.html",
     "dev": "pnpm run prepare-build && nodemon & pnpm run watch",
     "build": "pnpm run prepare-build && pnpm run bundle:purescript && pnpm run dce && pnpm run bundle:js",
