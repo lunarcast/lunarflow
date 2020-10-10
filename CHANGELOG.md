@@ -1,3 +1,12 @@
+# [1.1.0](https://github.com/lunarcast/lunarflow/compare/v1.0.0...v1.1.0) (2020-10-10)
+
+
+### Features
+
+* **client:** basic demo shapes on a canvas ([5cdf3d1](https://github.com/lunarcast/lunarflow/commit/5cdf3d1834f5c273b263ed471d90a76c5ee800c1))
+* **geometry:** Basic geometry shapes and stuff ([3e20ed9](https://github.com/lunarcast/lunarflow/commit/3e20ed9215604e65b93f477e8da4e0f00ca63ea7))
+* **utils:** created a PartialRow typeclass ([5b25080](https://github.com/lunarcast/lunarflow/commit/5b25080a480c3c37af67aa3f4c247a1f30ae5886))
+
 # 1.0.0 (2020-10-05)
 
 
