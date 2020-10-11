@@ -1,5 +1,6 @@
 module Lunarflow.Layout
   ( WithPosition
+  , ScopedLayout
   , Layout
   , LayoutContext
   , LayoutState
@@ -10,22 +11,23 @@ module Lunarflow.Layout
   , IndexMap
   , addIndices
   , runLayoutM
+  , fromScoped
   ) where
 
 import Prelude
 import Control.Monad.List.Trans (lift)
 import Control.Monad.List.Trans as ListT
 import Control.Monad.Reader (ReaderT, ask, asks, local, runReaderT)
-import Control.Monad.State (State, evalState, get, modify_, put)
+import Control.Monad.State (State, evalState, get, gets, modify_, put)
 import Control.MonadZero (empty, guard)
 import Control.Plus ((<|>))
-import Data.Debug (class Debug)
+import Data.Debug (class Debug, genericDebug)
 import Data.Debug as Debug
 import Data.Default (def)
 import Data.Generic.Rep (class Generic)
 import Data.List as List
+import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Newtype (class Newtype)
 import Data.Set as Set
 import Data.Traversable (for)
 import Data.TraversableWithIndex (forWithIndex)
@@ -56,26 +58,30 @@ type LayoutLambdaData
     }
 
 -- | Layouts are expressions which have vertical indices for every line.
-type Layout
+-- | This is the scoped variant, which keeps track of what scope everything is from.
+type ScopedLayout
   = Ast { | WithPosition ( index :: Int ) } { | WithPosition () } LayoutLambdaData
 
+type Layout
+  = Ast { position :: Int, index :: Int } Int { position :: Int, args :: List.List Int }
+
 -- | Ids used to connect lambdas together in visual chunks.
-newtype ScopeId
+data ScopeId
   = ScopeId Int
+  | Root
 
 derive instance eqScopeId :: Eq ScopeId
 
 derive instance ordScopeId :: Ord ScopeId
 
-derive newtype instance showScopeId :: Show ScopeId
+derive instance genericScopeId :: Generic ScopeId _
 
-derive newtype instance debugScopeId :: Debug ScopeId
+instance debugScopeId :: Debug ScopeId where
+  debug = genericDebug
 
 -- | The index at which the position we are looking for is stored in the indexMap. 
-newtype Position
-  = Position { index :: Int, scope :: ScopeId }
-
-derive instance newtypePositionid :: Newtype Position _
+data Position
+  = Position Int ScopeId
 
 derive instance eqPosition :: Eq Position
 
@@ -83,11 +89,8 @@ derive instance ordPosition :: Ord Position
 
 derive instance genericPosition :: Generic Position _
 
-instance showPosition :: Show Position where
-  show (Position { index, scope }) = show scope <> " -> " <> show index
-
 instance debugPosition :: Debug.Debug Position where
-  debug (Position { index, scope }) = Debug.constructor "Position" [ Debug.debug index, Debug.debug scope ]
+  debug = genericDebug
 
 -- | Read only context we can access at any time while generating layouts.
 type LayoutContext
@@ -107,7 +110,7 @@ type LayoutM a
   = ReaderT LayoutContext (ListT.ListT (State LayoutState)) a
 
 -- | Generate a layout from an ast.
-addIndices :: GroupedExpression -> LayoutM Layout
+addIndices :: GroupedExpression -> LayoutM ScopedLayout
 addIndices = go
   where
   -- | Get all the vars referenced in a given expression.
@@ -127,7 +130,7 @@ addIndices = go
   protect :: forall a. Set.Set Position -> LayoutM a -> LayoutM a
   protect inputs = local (\a -> a { protected = a.protected <> inputs })
 
-  getPosition :: Layout -> Position
+  getPosition :: ScopedLayout -> Position
   getPosition = case _ of
     Var { position } -> position
     Call { position } _ _ -> position
@@ -145,7 +148,7 @@ addIndices = go
   mkPosition :: Int -> LayoutM Position
   mkPosition index = do
     scope <- asks _.currentScope
-    pure $ Position { index, scope }
+    pure $ Position index scope
 
   newPosition :: Int -> LayoutM Position
   newPosition index = do
@@ -172,7 +175,7 @@ addIndices = go
 
       indexMapLength = List.length state.indexMap
 
-      floor = Tuple (Position { index: -1, scope: ctx.currentScope }) (-1)
+      floor = Tuple (Position (-1) ctx.currentScope) (-1)
     Tuple position index <- indices <|> pure floor
     -- The List.toUnfoldable resets the state, so we set it to the previous value.
     setState state
@@ -218,7 +221,7 @@ addIndices = go
       vars = Set.toUnfoldable $ usedVars expression
     Set.fromFoldable <$> for vars getVarPosition
 
-  go :: GroupedExpression -> LayoutM Layout
+  go :: GroupedExpression -> LayoutM ScopedLayout
   go = case _ of
     Var index -> do
       position <- getVarPosition index
@@ -260,12 +263,51 @@ addIndices = go
       pure $ Lambda { position, args, indexMap, scope } body'
 
 -- | Run the computations represented by a LayoutM monad.
-runLayoutM :: forall a. LayoutM a -> List.List a
+runLayoutM :: forall a. LayoutM a -> List.List (Tuple a IndexMap)
 runLayoutM m = evalState noListT def
   where
+  noListT :: _
   noListT = ListT.foldl (flip List.Cons) List.Nil noReader
 
-  noReader = runReaderT m emptyContext
+  noReader :: ListT.ListT (State LayoutState) (Tuple a IndexMap)
+  noReader = runReaderT m' emptyContext
 
   emptyContext :: LayoutContext
-  emptyContext = { protected: Set.empty, positions: List.Nil, currentScope: ScopeId (-1) }
+  emptyContext = { protected: Set.empty, positions: List.Nil, currentScope: Root }
+
+  m' :: LayoutM (Tuple a IndexMap)
+  m' = ado
+    v <- m
+    s <- lift $ lift $ gets _.indexMap
+    in Tuple v s
+
+-- | Transform a scoped layout into an unscoped one.
+fromScoped :: Tuple ScopedLayout IndexMap -> Maybe Layout
+fromScoped (Tuple layout rootMap) = go Map.empty layout
+  where
+  getPosition :: Map.Map ScopeId IndexMap -> Position -> Maybe Int
+  getPosition scopeMap (Position index scope) = do
+    indexMap <-
+      if scope == Root then
+        Just rootMap
+      else
+        Map.lookup scope scopeMap
+    indexMap `List.index` index
+
+  go :: Map.Map ScopeId IndexMap -> ScopedLayout -> Maybe Layout
+  go scopeMap = case _ of
+    Var { index, position } -> ado
+      position' <- getPosition scopeMap position
+      in Var { position: position', index }
+    Call { position } func arg -> ado
+      position' <- getPosition scopeMap position
+      func' <- go scopeMap func
+      arg' <- go scopeMap arg
+      in Call position' func' arg'
+    Lambda { position, indexMap, scope, args } body -> ado
+      position' <- getPosition scopeMap position
+      body' <- go scopeMap' body
+      args' <- for args (getPosition scopeMap' <<< _.position)
+      in Lambda { position: position', args: args' } body'
+      where
+      scopeMap' = Map.insert scope indexMap scopeMap
