@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json.schemastore.org/nodemon",
+  "exec": "pnpm build:css",
+  "watch": ["public/styles"],
+  "ext": "pcss"
+}
