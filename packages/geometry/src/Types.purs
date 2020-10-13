@@ -1,3 +1,4 @@
+-- | Types and constructors for the @thi.ng/geom bindings.
 module Lunarflow.Geometry.Types where
 
 import Prelude
@@ -12,10 +13,16 @@ type CommonAttribs r
     | r
     )
 
+type CommonAttribs'
+  = { | CommonAttribs () }
+
 type Position r
   = ( x :: Int, y :: Int
     | r
     )
+
+type Position'
+  = { | Position () }
 
 type ShapeConstructor a
   = forall r. PartialRow (CommonAttribs ()) r => Record r -> a
@@ -29,12 +36,12 @@ instance debugPolygonAttribs :: Debug PolygonAttribs where
   debug = genericDebug
 
 data Shape
-  = Rect { | CommonAttribs () } { | Position () } Int Int
-  | Polygon { | CommonAttribs () } PolygonAttribs
-  | Circle { | CommonAttribs () } { | Position () } Int
-  | Group { | CommonAttribs () } (Array Shape)
+  = Rect CommonAttribs' { | Position () } Int Int
+  | Polygon CommonAttribs' PolygonAttribs
+  | Circle CommonAttribs' { | Position () } Int
+  | Group CommonAttribs' (Array Shape)
 
-mergeAttribs :: { | CommonAttribs () } -> { | CommonAttribs () } -> { | CommonAttribs () }
+mergeAttribs :: CommonAttribs' -> CommonAttribs' -> CommonAttribs'
 mergeAttribs a b = { fill: b.fill, stroke: b.stroke }
 
 instance shapeSemigroup :: Semigroup Shape where
@@ -63,5 +70,12 @@ circle attribs = Circle (withDefaults defaultAttribs attribs)
 group :: ShapeConstructor (Array Shape -> Shape)
 group attribs = Group (withDefaults defaultAttribs attribs)
 
-defaultAttribs :: { | CommonAttribs () }
+defaultAttribs :: CommonAttribs'
 defaultAttribs = { fill: "blue", stroke: "black" }
+
+-- | Rect-like shape data.
+type Bounds
+  = { x :: Int, y :: Int, height :: Int, width :: Int }
+
+fromBounds :: ShapeConstructor (Bounds -> Shape)
+fromBounds attribs bounds = rect attribs { x: bounds.x, y: bounds.y } bounds.width bounds.height
