@@ -14,6 +14,8 @@
   , "tuples"
   , "typelevel-prelude"
   , "undefined"
+  , "fixed-points"
+  , "matryoshka"
   , "lunarflow-utils"
   ]
 , packages = ../../packages.dhall

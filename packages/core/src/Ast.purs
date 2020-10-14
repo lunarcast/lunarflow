@@ -1,42 +1,59 @@
 module Lunarflow.Ast
-  ( Ast(..)
+  ( AstF(..)
+  , Ast
   , RawExpression
   , Expression
   , WithIndex
-  , GroupedExpression
   , withDebrujinIndices
+  , call
+  , lambda
+  , var
   , printDeBrujin
-  , groupExpression
   ) where
 
 import Prelude
 import Control.Monad.Reader (Reader, asks, local, runReader)
 import Data.Debug (class Debug, genericDebug)
+import Data.Functor.Mu (Mu)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.List as List
 import Data.Maybe (Maybe(..))
+import Data.Tuple (Tuple(..))
+import Matryoshka (class Corecursive, Algebra, GAlgebra, cata, embed, para, project)
 
 -- | The meat and potatoes of representing an expression.
 -- |
 -- | - l represents the type lambdas carry around.
 -- | - c represents the type calls carry around.
 -- | - v represents the type variables carry around.
-data Ast v c l
-  = Call c (Ast v c l) (Ast v c l)
-  | Lambda l (Ast v c l)
+data AstF v c l r
+  = Call c r r
+  | Lambda l r
   | Var v
 
-derive instance genericAst :: Generic (Ast v c l) _
+derive instance genericAst :: Generic (AstF v c l a) _
 
--- instance showDeBrujinAst :: Show (Ast Int c l) where
---   show = printDeBrujin
--- else
-instance showAst :: (Show v, Show c, Show l) => Show (Ast v c l) where
-  show a = genericShow a
+derive instance functorAst :: Functor (AstF v c l)
 
-instance debugAst :: (Debug v, Debug c, Debug l) => Debug (Ast v c l) where
-  debug a = genericDebug a
+instance showAst :: (Show v, Show c, Show l, Show f) => Show (AstF v c l f) where
+  show = genericShow
+
+instance debugAst :: (Debug v, Debug c, Debug l, Debug r) => Debug (AstF v c l r) where
+  debug = genericDebug
+
+-- | The fixpoint of the ast functor.
+type Ast v c l
+  = Mu (AstF v c l)
+
+call :: forall t v c l. Corecursive t (AstF v c l) => c -> t -> t -> t
+call c f a = embed (Call c f a)
+
+var :: forall t v c l. Corecursive t (AstF v c l) => v -> t
+var = embed <<< Var
+
+lambda :: forall t v c l. Corecursive t (AstF v c l) => l -> t -> t
+lambda l t = embed (Lambda l t)
 
 -- | Basic lambda calculus expressions
 type RawExpression
@@ -51,32 +68,26 @@ type WithIndex r
 
 -- | Add de brujin indices to a lambda calculus expression.
 withDebrujinIndices :: RawExpression -> Expression
-withDebrujinIndices = flip runReader List.Nil <<< go
+withDebrujinIndices expr = runReader (cata algebra expr) List.Nil
   where
-  go :: RawExpression -> Reader (List.List String) Expression
-  go = case _ of
-    Call _ func argument -> Call unit <$> go func <*> go argument
-    Lambda name body -> Lambda name <$> (local (List.Cons name) $ go body)
-    Var name -> do
+  algebra :: Algebra (AstF String Unit String) (Reader (List.List String) Expression)
+  algebra = case _ of
+    Call _ func argument -> ado
+      func' <- func
+      argument' <- argument
+      in call unit func' argument'
+    Lambda name body -> ado
+      body' <- local (List.Cons name) body
+      in lambda name body'
+    Var name -> ado
       maybeIndex <- asks $ List.findIndex (eq name)
-      pure case maybeIndex of
-        Just index -> Var index
-        Nothing -> Var (-1)
-
-type GroupedExpression
-  = Ast Int Unit (List.List String)
-
-groupExpression :: Expression -> GroupedExpression
-groupExpression = case _ of
-  Call data' a b -> Call data' (groupExpression a) (groupExpression b)
-  Var data' -> Var data'
-  Lambda name body -> case groupExpression body of
-    Lambda data' body' -> Lambda (data' `List.snoc` name) body'
-    body' -> Lambda (List.singleton name) body'
+      in case maybeIndex of
+        Just index -> var index
+        Nothing -> var (-1)
 
 --  Pretty printing stuff:
 -- | Check if an ast chunk needs to be wrapped in parenthesis for printing
-needsParenthesis :: forall v c l. Boolean -> Ast v c l -> Boolean
+needsParenthesis :: forall v c l r. Boolean -> AstF v c l r -> Boolean
 needsParenthesis left = case _ of
   (Lambda _ _) -> left
   (Call _ _ _) -> not left
@@ -98,13 +109,12 @@ lambdaChar = "λ"
 
 -- | Print an expression which uses de brujin indices.
 printDeBrujin :: forall c l. Ast Int c l -> String
-printDeBrujin = case _ of
-  Var index -> show index
-  Lambda _ body -> lambdaChar <> printDeBrujin body
-  Call _ func arg ->
-    parenthesiseWhen (needsParenthesis true func) func'
-      <> parenthesiseWhen (needsParenthesis false arg) arg'
-    where
-    func' = printDeBrujin func
-
-    arg' = printDeBrujin arg
+printDeBrujin = para algebra
+  where
+  algebra :: GAlgebra (Tuple (Ast Int c l)) (AstF Int c l) String
+  algebra = case _ of
+    Var index -> show index
+    Lambda _ (Tuple _ body) -> lambdaChar <> body
+    Call _ (Tuple funcAst func) (Tuple argAst arg) ->
+      parenthesiseWhen (needsParenthesis true $ project funcAst) func
+        <> parenthesiseWhen (needsParenthesis false $ project argAst) arg

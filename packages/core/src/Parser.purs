@@ -16,7 +16,7 @@ import Data.Foldable (foldl)
 import Data.Foldable as Foldable
 import Data.Identity (Identity)
 import Data.NonEmpty (NonEmpty(..))
-import Lunarflow.Ast (Ast(..), RawExpression)
+import Lunarflow.Ast (RawExpression, call, lambda, var)
 import Partial.Unsafe (unsafePartial)
 import Text.Parsing.Parser (ParseError, Parser, ParserT, runParser)
 import Text.Parsing.Parser.Combinators (try)
@@ -70,7 +70,7 @@ expression' expr = do
   withCall expression'' = do
     argument <- try atom
     let
-      app = Call unit expression'' argument
+      app = call unit expression'' argument
     withCall app <|> pure app
 
   atom :: LunarflowParser RawExpression
@@ -80,7 +80,7 @@ expression' expr = do
   wrapped = parens expr
 
   variable :: ParserT String Identity RawExpression
-  variable = Var <$> identifier
+  variable = var <$> identifier
 
   lambdaExpr :: ParserT String Identity RawExpression
   lambdaExpr = do
@@ -89,8 +89,8 @@ expression' expr = do
     Foldable.oneOf $ reservedOp <$> lambdaBodyStarts
     body <- expr
     let
-      baseAst = Lambda arg body
-    pure $ foldl (flip Lambda) baseAst args
+      baseAst = lambda arg body
+    pure $ foldl (flip lambda) baseAst args
 
 -- | Parser for lambda calculus.
 expression :: LunarflowParser RawExpression
