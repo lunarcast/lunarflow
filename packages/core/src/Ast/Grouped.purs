@@ -8,6 +8,7 @@ import Data.Set as Set
 import Lunarflow.Ast (AstF(..), Expression, call, lambda, var)
 import Matryoshka (Algebra, cata, project)
 
+-- TODO: Make the argument list nonempty.
 -- | The base functor for grouped expressions.
 type GroupedExpressionF
   = AstF Int Unit (List.List String)

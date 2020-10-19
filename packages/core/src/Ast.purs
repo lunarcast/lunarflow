@@ -9,6 +9,7 @@ module Lunarflow.Ast
   , lambda
   , var
   , printDeBrujin
+  , isVar
   ) where
 
 import Prelude
@@ -118,3 +119,11 @@ printDeBrujin = para algebra
     Call _ (Tuple funcAst func) (Tuple argAst arg) ->
       parenthesiseWhen (needsParenthesis true $ project funcAst) func
         <> parenthesiseWhen (needsParenthesis false $ project argAst) arg
+
+-- | Check if an expression is a var
+isVar :: forall v c l. Ast v c l -> Boolean
+isVar =
+  project
+    >>> case _ of
+        Var _ -> true
+        _ -> false

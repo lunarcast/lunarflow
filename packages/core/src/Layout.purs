@@ -115,7 +115,17 @@ addIndices = para algebra
       position <- getVarPosition index
       in var { index, position }
     Call _ (Tuple _ layoutFunction) (Tuple groupedArgument layoutArgument) -> do
-      inArgument <- usedPositions groupedArgument
+      let
+        -- This type annotation is here so the compiler
+        -- knows which Unfoldable instance to use.
+        vars :: Array _
+        vars = Set.toUnfoldable $ references groupedArgument
+      -- This holds all the variables referenced inside the argument of the call
+      inArgument <- Set.fromFoldable <$> for vars getVarPosition
+      -- When we draw a call, we draw the function first and then the argument.
+      -- We don't want the space taken by the variables in the argument to be occupied
+      -- by stuff while drawing the function.
+      -- So we basically inform the call not to touch those spaces.
       function <- protect inArgument layoutFunction
       argument <- layoutArgument
       ado
@@ -129,9 +139,11 @@ addIndices = para algebra
         { body', args } <-
           local (_ { currentScope = scope }) do
             args <-
-              forWithIndex vars \index name -> ado
-                position <- newPosition (varCount - 1 - index)
-                in { name, position }
+              forWithIndex vars \index name -> do
+                state <- getState
+                setState state { indexMap = List.snoc state.indexMap (varCount - 1 - index) }
+                position <- mkPosition $ List.length state.indexMap
+                pure { name, position }
             let
               updateCtx ctx =
                 ctx
@@ -146,7 +158,7 @@ addIndices = para algebra
       where
       varCount = List.length vars
 
-  protect :: forall a. Set.Set Position -> LayoutM a -> LayoutM a
+  protect :: Set.Set Position -> LayoutM ~> LayoutM
   protect inputs = local (\a -> a { protected = a.protected <> inputs })
 
   getPosition :: ScopedLayout -> Position
@@ -168,12 +180,6 @@ addIndices = para algebra
   mkPosition index = do
     scope <- asks _.currentScope
     pure $ Position index scope
-
-  newPosition :: Int -> LayoutM Position
-  newPosition index = do
-    state <- getState
-    setState state { indexMap = state.indexMap <> pure index }
-    mkPosition $ List.length state.indexMap
 
   everywhere :: Set.Set Position -> LayoutM Position
   everywhere exclude = do
@@ -230,15 +236,6 @@ addIndices = para algebra
     case positions `List.index` index of
       Just position -> pure position
       Nothing -> empty
-
-  usedPositions :: GroupedExpression -> LayoutM (Set.Set Position)
-  usedPositions expression = do
-    let
-      -- This type annotation is here so the compiler
-      -- knows which Unfoldable instance to use.
-      vars :: Array _
-      vars = Set.toUnfoldable $ references expression
-    Set.fromFoldable <$> for vars getVarPosition
 
 -- | Run the computations represented by a LayoutM monad.
 runLayoutM :: forall a. LayoutM a -> List.List (Tuple a IndexMap)
