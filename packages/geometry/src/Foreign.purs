@@ -2,7 +2,8 @@ module Lunarflow.Geometry.Foreign
   ( Geometry
   , fromShape
   , renderGeometry
-  , fitIntoBounds
+  , bounds
+  , getRightBound
   ) where
 
 import Prelude
@@ -16,16 +17,21 @@ foreign import data Geometry :: Type
 -- | Cast a purescript shape to a js geometry.
 fromShape :: Shape -> Geometry
 fromShape = case _ of
-  Rect attribs position width height -> mkRect attribs position width height
+  Rect attribs bounds' -> mkRect attribs bounds'
   Circle attribs position radius -> mkCircle attribs position radius
   Polygon attribs points -> mkPolygon attribs points
   Group attribs shapes -> mkGroup attribs (fromShape <$> shapes)
 
 -- | Find the smallest rect some shapes fit in.
-fitIntoBounds :: Shape -> Bounds
-fitIntoBounds = fitIntoBoundsImpl <<< fromShape
+bounds :: Shape -> Bounds
+bounds = boundsImpl <<< fromShape
 
-foreign import mkRect :: CommonAttribs' -> { | Position () } -> Int -> Int -> Geometry
+-- TODO: more efficient way
+-- | Get the rightmost point in a shape 
+getRightBound :: Shape -> Int
+getRightBound = (\{ width, x } -> x + width) <<< bounds
+
+foreign import mkRect :: CommonAttribs' -> Bounds -> Geometry
 
 foreign import mkCircle :: CommonAttribs' -> { | Position () } -> Int -> Geometry
 
@@ -35,5 +41,5 @@ foreign import mkGroup :: CommonAttribs' -> Array Geometry -> Geometry
 
 foreign import renderGeometry :: Geometry -> Context2D -> Effect Unit
 
-foreign import fitIntoBoundsImpl :: Geometry -> Bounds
+foreign import boundsImpl :: Geometry -> Bounds
  -- foreign import geometryToRectImpl :: Partial => Geometry -> CommonAttribs' -> Position' -> Int -> Int -> Shape

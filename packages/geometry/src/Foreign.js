@@ -1,7 +1,7 @@
 const geom = require("@thi.ng/geom")
 const hiccupCanvas = require("@thi.ng/hiccup-canvas")
 
-exports.mkRect = (attribs) => ({ x, y }) => (width) => (height) =>
+exports.mkRect = (attribs) => ({ x, y, width, height }) =>
   geom.rect([x, y], [width, height], attribs)
 
 exports.mkCircle = (attribs) => ({ x, y }) => (radius) =>
@@ -17,14 +17,14 @@ exports.mkGroup = (attribs) => (shapes) => geom.group(attribs, shapes)
 
 exports.renderGeometry = (shape) => (ctx) => () => hiccupCanvas.draw(ctx, shape)
 
-exports.fitIntoBoundsImpl = (shape) => {
-  const rect = geom.fitIntoBounds2(shape, geom.rect())
+exports.boundsImpl = (shape) => {
+  const dest = geom.bounds(shape)
 
   return {
-    x: rect.pos[0],
-    y: rect.pos[1],
-    width: rect.size[0],
-    height: rect.size[1]
+    x: dest.pos[0],
+    y: dest.pos[1],
+    width: dest.size[0],
+    height: dest.size[1]
   }
 }
 

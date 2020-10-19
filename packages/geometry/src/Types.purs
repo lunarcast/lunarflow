@@ -27,6 +27,10 @@ type Position'
 type ShapeConstructor a
   = forall r. PartialRow (CommonAttribs ()) r => Record r -> a
 
+-- | Rect-like shape data.
+type Bounds
+  = { x :: Int, y :: Int, height :: Int, width :: Int }
+
 newtype PolygonAttribs
   = PolygonAttribs (Array (Record (Position + ())))
 
@@ -36,7 +40,7 @@ instance debugPolygonAttribs :: Debug PolygonAttribs where
   debug = genericDebug
 
 data Shape
-  = Rect CommonAttribs' { | Position () } Int Int
+  = Rect CommonAttribs' Bounds
   | Polygon CommonAttribs' PolygonAttribs
   | Circle CommonAttribs' { | Position () } Int
   | Group CommonAttribs' (Array Shape)
@@ -58,7 +62,7 @@ derive instance genericShape :: Generic Shape _
 instance debugSemigruoup :: Debug Shape where
   debug a = genericDebug a
 
-rect :: ShapeConstructor ({ | Position () } -> Int -> Int -> Shape)
+rect :: ShapeConstructor (Bounds -> Shape)
 rect attribs = Rect (withDefaults defaultAttribs attribs)
 
 polygon :: ShapeConstructor (PolygonAttribs -> Shape)
@@ -71,11 +75,4 @@ group :: ShapeConstructor (Array Shape -> Shape)
 group attribs = Group (withDefaults defaultAttribs attribs)
 
 defaultAttribs :: CommonAttribs'
-defaultAttribs = { fill: "blue", stroke: "black" }
-
--- | Rect-like shape data.
-type Bounds
-  = { x :: Int, y :: Int, height :: Int, width :: Int }
-
-fromBounds :: ShapeConstructor (Bounds -> Shape)
-fromBounds attribs bounds = rect attribs { x: bounds.x, y: bounds.y } bounds.width bounds.height
+defaultAttribs = { fill: "transparent", stroke: "black" }
