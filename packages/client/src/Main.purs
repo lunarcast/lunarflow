@@ -1,29 +1,40 @@
 module Main where
 
 import Prelude
-import Data.Maybe (Maybe(..))
+import Data.List as List
+import Data.Maybe (Maybe(..), fromJust)
+import Data.Tuple (fst)
+import Debug.Trace (traceM)
 import Effect (Effect)
 import Effect.Console as Console
 import Graphics.Canvas (getCanvasElementById, getContext2D)
+import Lunarbox.Render (render, runRenderM)
+import Lunarflow.Ast (withDebrujinIndices)
+import Lunarflow.Ast.Grouped (groupExpression)
 import Lunarflow.Geometry.Foreign (Geometry, fromShape, renderGeometry)
-import Lunarflow.Geometry.Types (PolygonAttribs(..), circle, group, polygon, rect)
+import Lunarflow.Layout (addIndices, fromScoped, runLayoutM)
+import Lunarflow.Parser (unsafeParseLambdaCalculus)
+import Lunarflow.Renderer.WithHeight (withHeights)
+import Partial.Unsafe (unsafePartial)
 
 geometry :: Geometry
 geometry =
-  fromShape
-    $ group { stroke: "red" }
-        [ polygon { fill: "brown" }
-            $ PolygonAttribs
-                [ { x: 100, y: 110 }
-                , { x: 140, y: 70 }
-                , { x: 200, y: 190 }
-                , { x: 350, y: 170 }
-                , { x: 190, y: 400 }
-                , { x: 100, y: 370 }
-                ]
-        , rect { fill: "yellow" } { x: 200, y: 40 } 70 160
-        , circle { fill: "green", stroke: "transparent" } { x: 300, y: 300 } 70
-        ]
+  fromShape $ runRenderM
+    $ render
+    $ fst
+    $ withHeights
+    $ unsafePartial
+    $ fromJust
+    -- TODO: fix bug with application creating a line in the same place as the lambda used as argument.
+    
+    $ flip List.index 1
+    $ List.catMaybes
+    $ map fromScoped
+    $ runLayoutM
+    $ addIndices
+    $ groupExpression
+    $ withDebrujinIndices
+    $ unsafeParseLambdaCalculus """\f a b -> f b a \x -> x"""
 
 main :: Effect Unit
 main = do
@@ -32,4 +43,5 @@ main = do
     Nothing -> Console.log "No canvas found"
     Just canvas' -> do
       ctx <- getContext2D canvas'
+      traceM geometry
       renderGeometry geometry ctx
