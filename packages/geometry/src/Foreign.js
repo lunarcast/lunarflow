@@ -4,7 +4,7 @@ const hiccupCanvas = require("@thi.ng/hiccup-canvas")
 exports.mkRect = (attribs) => ({ x, y, width, height }) =>
   geom.rect([x, y], [width, height], attribs)
 
-exports.mkCircle = (attribs) => ({ x, y }) => (radius) =>
+exports.mkCircle = (attribs) => ({ x, y, radius }) =>
   geom.circle([x, y], radius, attribs)
 
 exports.mkPolygon = (attribs) => (points) =>

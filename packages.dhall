@@ -24,6 +24,22 @@ let additions =
         , repo = "https://github.com/hdgarrood/purescript-debugged"
         , version = "744498226da3c9b5b37c69771cc0378a65cc8189"
         }
+      , undefined-is-not-a-problem =
+        { dependencies =
+          [ "assert"
+          , "console"
+          , "effect"
+          , "foreign"
+          , "prelude"
+          , "psci-support"
+          , "random"
+          , "typelevel-prelude"
+          , "unsafe-coerce"
+          ]
+        , repo =
+            "https://github.com/paluh/purescript-undefined-is-not-a-problem"
+        , version = "2f8b4e91a814cf558bdc15dc96667ac806c4730f"
+        }
       }
 
 let packages =
@@ -32,4 +48,4 @@ let packages =
       with lunarflow-core = ./packages/core/spago.dhall as Location
       with lunarflow-geometry = ./packages/geometry/spago.dhall as Location
 
-in  packages // overrides // additions
+in  packages ⫽ overrides ⫽ additions

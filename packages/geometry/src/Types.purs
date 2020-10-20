@@ -2,19 +2,33 @@
 module Lunarflow.Geometry.Types where
 
 import Prelude
-import Data.Debug (class Debug, genericDebug)
 import Data.Generic.Rep (class Generic)
-import Lunarflow.Row (class PartialRow, withDefaults)
+import Data.Typelevel.Num (D2, D6)
+import Data.Undefined.NoProblem (Opt)
+import Data.Undefined.NoProblem.Closed as Closed
+import Data.Vec (Vec)
+import Math (Radians)
 import Type.Row (type (+))
 
-type CommonAttribs r
-  = ( fill :: String
-    , stroke :: String
-    | r
-    )
+-- | Shorthand for vec 2s of ints
+type Vec2
+  = Vec D2 Int
 
-type CommonAttribs'
-  = { | CommonAttribs () }
+-- | Transform matrices are just vectors with 6 elements
+type TransformMatrix
+  = Vec D6 Int
+
+-- | Attributes all the shapes can accept
+type CommonAttribs
+  = { fill :: Opt String
+    , stroke :: Opt String
+    , transform :: Opt TransformMatrix
+    , setTransform :: Opt TransformMatrix
+    , translate :: Opt Vec2
+    , scale :: Opt Vec2
+    , rotate :: Opt Radians
+    , alpha :: Opt Int
+    }
 
 type Position r
   = ( x :: Int, y :: Int
@@ -25,54 +39,47 @@ type Position'
   = { | Position () }
 
 type ShapeConstructor a
-  = forall r. PartialRow (CommonAttribs ()) r => Record r -> a
+  = forall r. Closed.Coerce r CommonAttribs => r -> a
 
 -- | Rect-like shape data.
 type Bounds
   = { x :: Int, y :: Int, height :: Int, width :: Int }
 
-newtype PolygonAttribs
-  = PolygonAttribs (Array (Record (Position + ())))
+type PolygonAttribs
+  = Array (Record (Position + ()))
 
-derive instance genericPolygonAttribs :: Generic PolygonAttribs _
-
-instance debugPolygonAttribs :: Debug PolygonAttribs where
-  debug = genericDebug
+type CircleAttribs
+  = Record (Position + ( radius :: Int ))
 
 data Shape
-  = Rect CommonAttribs' Bounds
-  | Polygon CommonAttribs' PolygonAttribs
-  | Circle CommonAttribs' { | Position () } Int
-  | Group CommonAttribs' (Array Shape)
+  = Rect CommonAttribs Bounds
+  | Polygon CommonAttribs PolygonAttribs
+  | Circle CommonAttribs CircleAttribs
+  | Group CommonAttribs (Array Shape)
 
-mergeAttribs :: CommonAttribs' -> CommonAttribs' -> CommonAttribs'
-mergeAttribs a b = { fill: b.fill, stroke: b.stroke }
+-- Constructors
+rect :: ShapeConstructor (Bounds -> Shape)
+rect attribs = Rect (Closed.coerce attribs)
 
+polygon :: ShapeConstructor (PolygonAttribs -> Shape)
+polygon attribs = Polygon (Closed.coerce attribs)
+
+circle :: ShapeConstructor (CircleAttribs -> Shape)
+circle attribs = Circle (Closed.coerce attribs)
+
+group :: ShapeConstructor (Array Shape -> Shape)
+group attribs = Group (Closed.coerce attribs)
+
+defaultAttribs :: CommonAttribs
+defaultAttribs = Closed.coerce {}
+
+-- Typeclass instances:
+-- NOTE: in case we want to go back to the weirder but more efficient 
+-- version we can look back to the 0aa7dde39324816a8a92e89d368ca9278f593d45 commit.
 instance shapeSemigroup :: Semigroup Shape where
-  append (Group attribs shapes) (Group attribs' shapes') = Group (mergeAttribs attribs attribs') (shapes <> shapes')
-  append (Group attribs shapes) shape = Group attribs (shapes <> [ shape ])
-  append shape other@(Group _ _) = append other shape
   append a b = Group defaultAttribs [ a, b ]
 
-instance monoidSemigroup :: Monoid Shape where
+instance shapeMonoid :: Monoid Shape where
   mempty = Group defaultAttribs []
 
 derive instance genericShape :: Generic Shape _
-
-instance debugSemigruoup :: Debug Shape where
-  debug a = genericDebug a
-
-rect :: ShapeConstructor (Bounds -> Shape)
-rect attribs = Rect (withDefaults defaultAttribs attribs)
-
-polygon :: ShapeConstructor (PolygonAttribs -> Shape)
-polygon attribs = Polygon (withDefaults defaultAttribs attribs)
-
-circle :: ShapeConstructor ({ | Position () } -> Int -> Shape)
-circle attribs = Circle (withDefaults defaultAttribs attribs)
-
-group :: ShapeConstructor (Array Shape -> Shape)
-group attribs = Group (withDefaults defaultAttribs attribs)
-
-defaultAttribs :: CommonAttribs'
-defaultAttribs = { fill: "transparent", stroke: "black" }

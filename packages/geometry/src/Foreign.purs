@@ -9,7 +9,7 @@ module Lunarflow.Geometry.Foreign
 import Prelude
 import Effect (Effect)
 import Graphics.Canvas (Context2D)
-import Lunarflow.Geometry.Types (CommonAttribs', PolygonAttribs, Position, Shape(..), Bounds)
+import Lunarflow.Geometry.Types (Bounds, CircleAttribs, CommonAttribs, PolygonAttribs, Shape(..))
 
 -- | @thi.ng/geom Geometry representation.
 foreign import data Geometry :: Type
@@ -18,7 +18,7 @@ foreign import data Geometry :: Type
 fromShape :: Shape -> Geometry
 fromShape = case _ of
   Rect attribs bounds' -> mkRect attribs bounds'
-  Circle attribs position radius -> mkCircle attribs position radius
+  Circle attribs data' -> mkCircle attribs data'
   Polygon attribs points -> mkPolygon attribs points
   Group attribs shapes -> mkGroup attribs (fromShape <$> shapes)
 
@@ -31,15 +31,15 @@ bounds = boundsImpl <<< fromShape
 getRightBound :: Shape -> Int
 getRightBound = (\{ width, x } -> x + width) <<< bounds
 
-foreign import mkRect :: CommonAttribs' -> Bounds -> Geometry
+foreign import mkRect :: CommonAttribs -> Bounds -> Geometry
 
-foreign import mkCircle :: CommonAttribs' -> { | Position () } -> Int -> Geometry
+foreign import mkCircle :: CommonAttribs -> CircleAttribs -> Geometry
 
-foreign import mkPolygon :: CommonAttribs' -> PolygonAttribs -> Geometry
+foreign import mkPolygon :: CommonAttribs -> PolygonAttribs -> Geometry
 
-foreign import mkGroup :: CommonAttribs' -> Array Geometry -> Geometry
+foreign import mkGroup :: CommonAttribs -> Array Geometry -> Geometry
 
 foreign import renderGeometry :: Geometry -> Context2D -> Effect Unit
 
 foreign import boundsImpl :: Geometry -> Bounds
- -- foreign import geometryToRectImpl :: Partial => Geometry -> CommonAttribs' -> Position' -> Int -> Int -> Shape
+ -- foreign import geometryToRectImpl :: Partial => Geometry -> CommonAttribs -> Position' -> Int -> Int -> Shape

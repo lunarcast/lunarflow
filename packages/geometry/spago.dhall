@@ -15,6 +15,8 @@
   , "effect"
   , "console"
   , "canvas"
+  , "sized-vectors"
+  , "undefined-is-not-a-problem"
   , "lunarflow-utils"
   , "lunarflow-core"
   ]
