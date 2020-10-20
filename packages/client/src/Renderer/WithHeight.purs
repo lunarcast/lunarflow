@@ -11,7 +11,7 @@ import Data.Array (foldr)
 import Data.Array as Array
 import Data.Bifunctor (lmap)
 import Data.Foldable (sum)
-import Data.Functor.Mu (Mu)
+import Lunarflow.Mu (Mu)
 import Data.List (List, length) as List
 import Data.Map as Map
 import Data.Tuple (Tuple(..), snd, uncurry)

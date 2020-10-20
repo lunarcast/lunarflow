@@ -15,19 +15,21 @@ import Lunarflow.Geometry.Foreign (Geometry, fromShape, renderGeometry)
 import Lunarflow.Layout (addIndices, fromScoped, runLayoutM)
 import Lunarflow.Parser (unsafeParseLambdaCalculus)
 import Lunarflow.Renderer.WithHeight (withHeights)
+import Lunarflow.Debug (debugSpy)
 import Partial.Unsafe (unsafePartial)
 
 geometry :: Geometry
 geometry =
   fromShape $ runRenderM
     $ render
+    $ debugSpy
     $ fst
     $ withHeights
     $ unsafePartial
     $ fromJust
     -- TODO: fix bug with application creating a line in the same place as the lambda used as argument.
     
-    $ flip List.index 1
+    $ flip List.index 0
     $ List.catMaybes
     $ map fromScoped
     $ runLayoutM
