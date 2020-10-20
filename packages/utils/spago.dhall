@@ -7,6 +7,8 @@
   , "effect"
   , "console"
   , "transformers"
+  , "fixed-points"
+  , "matryoshka"
   ]
 , packages = ../../packages.dhall
 , sources = [ "src/**/*.purs" ]

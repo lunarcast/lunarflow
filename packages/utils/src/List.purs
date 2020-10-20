@@ -1,8 +1,9 @@
 module Lunarflow.List where
 
 import Prelude
-import Data.List (List(..), length, (:), (..), (!!))
+import Data.List (List(..), length, mapWithIndex, (!!), (..), (:))
 import Data.Maybe (fromMaybe)
+import Data.Tuple (Tuple(..))
 
 -- | Merge 2 lists elements by element.
 merge :: forall a. (a -> a -> a) -> List a -> List a -> List a
@@ -25,3 +26,7 @@ with index empty value list =
   maxLength = max index (inputLength - 1)
 
   inputLength = length list
+
+-- | Basically mapping with indices and saving them.
+indexed :: forall a. List a -> List (Tuple Int a)
+indexed = mapWithIndex Tuple
