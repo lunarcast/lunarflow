@@ -1,7 +1,7 @@
 module Lunarflow.Ast.Grouped where
 
 import Prelude
-import Data.Functor.Mu (Mu)
+import Lunarflow.Mu (Mu)
 import Data.List as List
 import Data.Maybe (Maybe(..))
 import Data.Set as Set

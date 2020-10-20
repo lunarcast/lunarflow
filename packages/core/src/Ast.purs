@@ -15,7 +15,7 @@ module Lunarflow.Ast
 import Prelude
 import Control.Monad.Reader (Reader, asks, local, runReader)
 import Data.Debug (class Debug, genericDebug)
-import Data.Functor.Mu (Mu)
+import Lunarflow.Mu (Mu)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.List as List

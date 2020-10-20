@@ -37,7 +37,7 @@ import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), uncurry)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (GroupedExpressionF, GroupedExpression, references)
-import Lunarflow.Utils (indexed)
+import Lunarflow.List (indexed)
 import Matryoshka (Algebra, GAlgebra, cata, para, project)
 
 -- | Mapping from positions to vertical indices.
