@@ -8,7 +8,6 @@
   , "psci-support"
   , "record"
   , "strings"
-  , "transformers"
   , "tuples"
   , "typelevel-prelude"
   , "undefined"
@@ -17,6 +16,8 @@
   , "canvas"
   , "sized-vectors"
   , "undefined-is-not-a-problem"
+  , "fixed-points"
+  , "matryoshka"
   , "lunarflow-utils"
   , "lunarflow-core"
   ]

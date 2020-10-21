@@ -7,7 +7,9 @@ import Data.Typelevel.Num (D2, D6)
 import Data.Undefined.NoProblem (Opt)
 import Data.Undefined.NoProblem.Closed as Closed
 import Data.Vec (Vec)
+import Lunarflow.Mu (Mu)
 import Math (Radians)
+import Matryoshka (class Corecursive, embed)
 import Type.Row (type (+))
 
 -- | Shorthand for vec 2s of ints
@@ -51,35 +53,33 @@ type PolygonAttribs
 type CircleAttribs
   = Record (Position + ( radius :: Int ))
 
-data Shape
+-- | The base functor for Shape.
+data ShapeF a
   = Rect CommonAttribs Bounds
   | Polygon CommonAttribs PolygonAttribs
   | Circle CommonAttribs CircleAttribs
-  | Group CommonAttribs (Array Shape)
+  | Group CommonAttribs (Array a)
+
+-- | Type for stuff we can render using thi.ng/hiccup-canvas.
+type Shape
+  = Mu ShapeF
 
 -- Constructors
-rect :: ShapeConstructor (Bounds -> Shape)
-rect attribs = Rect (Closed.coerce attribs)
+rect :: forall t. Corecursive t ShapeF => ShapeConstructor (Bounds -> t)
+rect attribs = embed <<< Rect (Closed.coerce attribs)
 
-polygon :: ShapeConstructor (PolygonAttribs -> Shape)
-polygon attribs = Polygon (Closed.coerce attribs)
+polygon :: forall t. Corecursive t ShapeF => ShapeConstructor (PolygonAttribs -> t)
+polygon attribs = embed <<< Polygon (Closed.coerce attribs)
 
-circle :: ShapeConstructor (CircleAttribs -> Shape)
-circle attribs = Circle (Closed.coerce attribs)
+circle :: forall t. Corecursive t ShapeF => ShapeConstructor (CircleAttribs -> t)
+circle attribs = embed <<< Circle (Closed.coerce attribs)
 
-group :: ShapeConstructor (Array Shape -> Shape)
-group attribs = Group (Closed.coerce attribs)
+group :: forall t. Corecursive t ShapeF => ShapeConstructor (Array t -> t)
+group attribs = embed <<< Group (Closed.coerce attribs)
 
 defaultAttribs :: CommonAttribs
 defaultAttribs = Closed.coerce {}
 
--- Typeclass instances:
--- NOTE: in case we want to go back to the weirder but more efficient 
--- version we can look back to the 0aa7dde39324816a8a92e89d368ca9278f593d45 commit.
-instance shapeSemigroup :: Semigroup Shape where
-  append a b = Group defaultAttribs [ a, b ]
+derive instance genericShape :: Generic (ShapeF a) _
 
-instance shapeMonoid :: Monoid Shape where
-  mempty = Group defaultAttribs []
-
-derive instance genericShape :: Generic Shape _
+derive instance functorShape :: Functor ShapeF
