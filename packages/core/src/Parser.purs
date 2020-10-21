@@ -19,7 +19,6 @@ import Data.NonEmpty (NonEmpty(..))
 import Lunarflow.Ast (RawExpression, call, lambda, var)
 import Partial.Unsafe (unsafePartial)
 import Text.Parsing.Parser (ParseError, Parser, ParserT, runParser)
-import Text.Parsing.Parser.Combinators (try)
 import Text.Parsing.Parser.String (oneOf)
 import Text.Parsing.Parser.Token (GenLanguageDef(..), GenTokenParser, LanguageDef, alphaNum, letter, makeTokenParser)
 
@@ -61,17 +60,11 @@ type LunarflowParser r
 -- | This references itself so we use it within a fixpoint operator
 expression' :: LunarflowParser RawExpression -> LunarflowParser RawExpression
 expression' expr = do
-  expression'' <- atom
-  withCall expression'' <|> pure expression''
+  -- expression'' <- atom
+  (NonEmpty expression'' args) <- NonEmptyArray.toNonEmpty <$> some atom
+  pure $ foldl (call unit) expression'' args
   where
   { parens, identifier, reservedOp } = tokenParser
-
-  withCall :: RawExpression -> LunarflowParser RawExpression
-  withCall expression'' = do
-    argument <- try atom
-    let
-      app = call unit expression'' argument
-    withCall app <|> pure app
 
   atom :: LunarflowParser RawExpression
   atom = wrapped <|> lambdaExpr <|> variable
