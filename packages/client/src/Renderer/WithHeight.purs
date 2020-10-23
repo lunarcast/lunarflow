@@ -48,7 +48,7 @@ withHeights = cata algebra
   where
   algebra :: Algebra LayoutF (Tuple YLayout YMap)
   algebra = case _ of
-    Lambda { position, args } (Tuple body bodyMeasures) -> Tuple yLambda bodyMeasures
+    Lambda { position, args } (Tuple body bodyMeasures) -> Tuple yLambda measures
       where
       (Tuple slice remaining) = splitMap (List.length args) bodyMeasures
 
