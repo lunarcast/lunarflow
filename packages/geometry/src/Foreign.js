@@ -28,6 +28,8 @@ exports.boundsImpl = (shape) => {
   }
 }
 
+exports.nullGeometry = null
+
 // exports.geometryToRectImpl = (shape) => (build) =>
 //   build({ x: geometry.pos[0], y: geometry.pos[1] })(geometry.size[0])(
 //     geometry.size[1]

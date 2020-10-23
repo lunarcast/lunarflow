@@ -2,15 +2,15 @@
 module Lunarflow.Geometry.Types where
 
 import Prelude
-import Data.Generic.Rep (class Generic)
+import Data.Array as Array
+import Data.Foldable (class Foldable)
 import Data.Typelevel.Num (D2, D6)
 import Data.Undefined.NoProblem (Opt)
 import Data.Undefined.NoProblem.Closed as Closed
 import Data.Vec (Vec)
-import Lunarflow.Mu (Mu)
 import Math (Radians)
-import Matryoshka (class Corecursive, embed)
 import Type.Row (type (+))
+import Unsafe.Coerce (unsafeCoerce)
 
 -- | Shorthand for vec 2s of ints
 type Vec2
@@ -54,32 +54,34 @@ type CircleAttribs
   = Record (Position + ( radius :: Int ))
 
 -- | The base functor for Shape.
-data ShapeF a
+data Shape
   = Rect CommonAttribs Bounds
   | Polygon CommonAttribs PolygonAttribs
   | Circle CommonAttribs CircleAttribs
-  | Group CommonAttribs (Array a)
-
--- | Type for stuff we can render using thi.ng/hiccup-canvas.
-type Shape
-  = Mu ShapeF
+  | Group CommonAttribs (Array Shape)
+  | Null
 
 -- Constructors
-rect :: forall t. Corecursive t ShapeF => ShapeConstructor (Bounds -> t)
-rect attribs = embed <<< Rect (Closed.coerce attribs)
+rect :: ShapeConstructor (Bounds -> Shape)
+rect attribs = Rect (Closed.coerce attribs)
 
-polygon :: forall t. Corecursive t ShapeF => ShapeConstructor (PolygonAttribs -> t)
-polygon attribs = embed <<< Polygon (Closed.coerce attribs)
+polygon :: ShapeConstructor (PolygonAttribs -> Shape)
+polygon attribs = Polygon (Closed.coerce attribs)
 
-circle :: forall t. Corecursive t ShapeF => ShapeConstructor (CircleAttribs -> t)
-circle attribs = embed <<< Circle (Closed.coerce attribs)
+circle :: ShapeConstructor (CircleAttribs -> Shape)
+circle attribs = Circle (Closed.coerce attribs)
 
-group :: forall t. Corecursive t ShapeF => ShapeConstructor (Array t -> t)
-group attribs = embed <<< Group (Closed.coerce attribs)
+group :: ShapeConstructor (Array Shape -> Shape)
+group attribs = Group (Closed.coerce attribs)
 
 defaultAttribs :: CommonAttribs
 defaultAttribs = Closed.coerce {}
 
-derive instance genericShape :: Generic (ShapeF a) _
+fromFoldable :: forall f. Foldable f => f (Shape) -> Shape
+fromFoldable = Array.fromFoldable >>> go
+  where
+  go [] = Null
 
-derive instance functorShape :: Functor ShapeF
+  go [ v ] = v
+
+  go more = Group (unsafeCoerce {}) more
