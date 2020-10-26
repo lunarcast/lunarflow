@@ -1,6 +1,7 @@
 { name = "lunarflow-core"
 , dependencies =
   [ "data-default"
+  , "prelude"
   , "debug"
   , "debugged"
   , "generics-rep"
@@ -17,6 +18,7 @@
   , "fixed-points"
   , "matryoshka"
   , "lunarflow-utils"
+  , "lunarflow-benchmarks"
   ]
 , packages = ../../packages.dhall
 , sources = [ "src/**/*.purs" ]

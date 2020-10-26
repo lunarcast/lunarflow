@@ -1,6 +1,7 @@
 { name = "lunarflow-geometry"
 , dependencies =
   [ "psci-support"
+  , "prelude"
   , "unsafe-coerce"
   , "effect"
   , "canvas"
