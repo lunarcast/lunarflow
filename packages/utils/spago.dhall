@@ -1,6 +1,7 @@
 { name = "lunarflow-utils"
 , dependencies =
   [ "debugged"
+  , "prelude"
   , "ordered-collections"
   , "psci-support"
   , "tuples"
