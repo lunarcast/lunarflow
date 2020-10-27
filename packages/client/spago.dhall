@@ -25,7 +25,6 @@
   , "lunarflow-utils"
   , "lunarflow-core"
   , "lunarflow-geometry"
-  , "lunarflow-benchmark"
   ]
 , packages = ../../packages.dhall
 , sources = [ "./src/**/*.purs" ]

@@ -1,48 +1,46 @@
 module Main where
 
 import Prelude
-import Data.List as List
-import Data.Maybe (Maybe(..), fromJust)
+import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
 import Data.Tuple (fst)
+import Debug.Trace (spy)
 import Effect (Effect)
 import Effect.Console as Console
-import Effect.Unsafe (unsafePerformEffect)
 import Graphics.Canvas (getCanvasElementById, getContext2D)
 import Lunarbox.Render (render, runRenderM)
 import Lunarflow.Ast (withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
 import Lunarflow.Geometry.Foreign (Geometry, fromShape, renderGeometry)
-import Lunarflow.Layout (addIndices, fromScoped, runLayoutM)
+import Lunarflow.Layout (addIndices, runLayoutM, unscopeLayout)
 import Lunarflow.Parser (unsafeParseLambdaCalculus)
 import Lunarflow.Profile (profileApplication)
 import Lunarflow.Renderer.WithHeight (withHeights)
-import Partial.Unsafe (unsafePartial)
+import Partial.Unsafe (unsafeCrashWith)
 
 geometryBenchmarks :: Effect Geometry
 geometryBenchmarks =
   profileApplication "Converting shape to geometry" fromShape
-    $ profileApplication "Rendering layout" (runRenderM <<< render)
+    $ profileApplication "Rendering layout" (spy "hmmm" <<< runRenderM <<< render)
     $ map fst
     $ profileApplication "Adding height data" withHeights
-    $ profileApplication "Unscoping layout" (unsafePartial $ fromJust <<< fromScoped)
-    $ profileApplication "Picking the layout to render"
-        ( unsafePartial
-            $ fromJust
-            <<< flip List.index 0
-        )
     $ map
-        ( \layouts ->
-            unsafePerformEffect do
-              Console.log
-                $ "Created "
-                <> show (List.length layouts)
-                <> " layouts."
-              pure layouts
+        ( case _ of
+            Left err -> unsafeCrashWith $ show err
+            Right a -> a
         )
-    $ profileApplication "Adding vertical indices" (runLayoutM <<< addIndices)
+    $ profileApplication "Creating layout"
+        ( runLayoutM
+            -- <<< map (spy "unscoped")
+            
+            <<< unscopeLayout
+            -- <<< map debugSpy
+            
+            <<< addIndices
+        )
     $ profileApplication "Grouping expression" groupExpression
     $ profileApplication "Adding de-brujin indices" withDebrujinIndices
-    $ profileApplication "Parsing" unsafeParseLambdaCalculus """\s z. s (s (s (s (s z)))))"""
+    $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f .(\x. f x x)  (\x. f x x)"""
 
 -- $ unsafeParseLambdaCalculus """\f x y. f y x \x -> y x"""
 main :: Effect Unit

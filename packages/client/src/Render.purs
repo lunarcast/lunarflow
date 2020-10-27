@@ -12,6 +12,7 @@ import Data.Set as Set
 import Data.Tuple (Tuple(..), fst, snd)
 import Data.Unfoldable (replicate)
 import Data.Vec (vec2)
+import Debug.Trace (spy)
 import Lunarflow.Ast (AstF(..), isVar)
 import Lunarflow.Geometry.Foreign (getRightBound)
 import Lunarflow.Geometry.Foreign as ForeignShape
@@ -71,7 +72,7 @@ render = para algebra >>> map (map snd >>> Shape.fromFoldable)
     bodyShapes <- inScope argCount <$> local (updateContext argCount) body
     slices <- ask <#> _.slices
     let
-      shapesInScope = snd <$> bodyShapes.yes
+      shapesInScope = snd <$> spy "yes" (bodyShapes.yes)
 
       bounds :: Bounds
       bounds = ForeignShape.bounds $ Shape.fromFoldable shapesInScope
@@ -80,7 +81,7 @@ render = para algebra >>> map (map snd >>> Shape.fromFoldable)
       result =
         Tuple 0
           $ Shape.group { translate: vec2 0 (getY 0 position slices) }
-          $ Array.cons (Shape.rect { fill: "black", stroke: "red" } bounds)
+          $ Array.cons (Shape.rect { fill: "rgba(128,128,128,0.5)", stroke: "red" } bounds)
               shapesInScope
     pure $ NonEmptyArray.cons' result $ shiftScope argCount <$> bodyShapes.no
     where
