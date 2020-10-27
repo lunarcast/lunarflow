@@ -15,6 +15,8 @@ exports.mkPolygon = (attribs) => (points) =>
 
 exports.mkGroup = (attribs) => (shapes) => geom.group(attribs, shapes)
 
+exports.translate = geom.translate
+
 exports.renderGeometry = (shape) => (ctx) => () => hiccupCanvas.draw(ctx, shape)
 
 exports.boundsImpl = (shape) => {

@@ -59,6 +59,9 @@ data Shape
   | Polygon CommonAttribs PolygonAttribs
   | Circle CommonAttribs CircleAttribs
   | Group CommonAttribs (Array Shape)
+  -- NOTE: this is here to circumvent a bug in thi.ng/geom
+  -- which causes the bounds function to ignore transforms on groups.
+  | Translate Vec2 Shape
   | Null
 
 -- Constructors

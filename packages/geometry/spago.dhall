@@ -9,6 +9,7 @@
   , "typelevel-prelude"
   , "typelevel"
   , "sized-vectors"
+  , "functions"
   , "undefined-is-not-a-problem"
   , "lunarflow-utils"
   ]
