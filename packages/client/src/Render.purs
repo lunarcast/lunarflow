@@ -13,7 +13,6 @@ import Data.Traversable (sequence)
 import Data.Tuple (Tuple(..))
 import Data.Unfoldable (replicate)
 import Data.Vec (vec2)
-import Debug.Trace (spy, traceM)
 import Lunarflow.Ast (AstF(..), isVar)
 import Lunarflow.Geometry.Foreign (getRightBound)
 import Lunarflow.Geometry.Foreign as ForeignShape
@@ -55,6 +54,7 @@ type ScopedShape
   = { scope :: Int
     , shape :: Shape.Shape
     , color :: String
+    , y :: Int
     }
 
 type RenderList
@@ -84,19 +84,28 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
       argCount = List.length args
     newColors <- sequence $ replicate argCount freshColor
     bodyShapes <- inScope argCount <$> local (updateContext argCount newColors) body
-    color <- maybe freshColor (_.color >>> pure) (Array.head bodyShapes.yes)
-    slices <- ask <#> _.slices
+    --
     let
+      bodyHead = Array.head bodyShapes.yes
+    --
+    color <- maybe freshColor (_.color >>> pure) bodyHead
+    slices <- ask <#> _.slices
+    --
+    let
+      shapesInScope :: Array Shape.Shape
       shapesInScope = _.shape <$> bodyShapes.yes
 
       bounds :: Bounds
       bounds = ForeignShape.bounds $ Shape.fromFoldable shapesInScope
 
+      yOffset :: Int
+      yOffset = lineHeight / 2 + getY 0 position slices
+
       result :: ScopedShape
       result =
         { shape:
           Shape.group {}
-            $ map (Shape.Translate $ vec2 0 $ lineHeight / 2 + getY 0 position slices)
+            $ map (Shape.Translate $ vec2 0 yOffset)
             $ Array.cons
                 ( Shape.rect
                     { fill: "black"
@@ -110,6 +119,7 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
                 shapesInScope
         , scope: 0
         , color
+        , y: yOffset + maybe 0 _.y bodyHead
         }
     pure $ NonEmptyArray.cons' result $ shiftScope argCount <$> bodyShapes.no
     where
@@ -125,23 +135,26 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
     -- TODO: don't do stupid stuff like this
     let
       color = fromMaybe "black" (List.index colors index)
+
+      y = linePadding + getY index position slices
     pure
       $ NonEmptyArray.singleton
           if (Set.member index doNotRender) then
             { scope: 0
             , color
             , shape: Shape.Null
+            , y
             }
           else
             { scope: index
             , color
+            , y
             , shape:
               Shape.rect
                 { fill: color
-                , stroke: "black"
                 }
                 { x: 0
-                , y: linePadding + getY index position slices
+                , y
                 , height: lineHeight
                 , width: max lineWidth start
                 }
@@ -162,25 +175,26 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
             |> getRightBound
     argument <- renderFn functionEnd mkArg
     let
+      argumentEnd :: Int
       argumentEnd =
         argument
           |> map _.shape
           |> Shape.fromFoldable
           |> getRightBound
 
+      functionHead :: ScopedShape
+      functionHead = NonEmptyArray.head function
+
+      functionContinuation :: Shape.Shape
       functionContinuation =
         Shape.rect
-          { fill: "green"
-          , stroke: "black"
+          { fill: functionHead.color
           }
           { x: functionEnd
           , width: argumentEnd - functionEnd
           , height: lineHeight
-          , y: linePadding + getLayoutY functionLayout slices
+          , y: functionHead.y
           }
-
-      functionHead :: ScopedShape
-      functionHead = NonEmptyArray.head function
 
       functionShapes :: RenderList
       functionShapes =
@@ -188,11 +202,15 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
           { scope: functionHead.scope
           , shape: functionContinuation
           , color: functionHead.color
+          , y: functionHead.y
           }
           function
 
       argumentHead :: ScopedShape
       argumentHead = NonEmptyArray.head argument
+
+      y :: Int
+      y = linePadding + getY 0 position slices
 
       resultShape :: ScopedShape
       resultShape =
@@ -200,14 +218,14 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
         , shape:
           Shape.rect
             { fill: argumentHead.color
-            , stroke: "black"
             }
             { x: argumentEnd
             , width: lineWidth
             , height: lineHeight
-            , y: linePadding + getY 0 position slices
+            , y
             }
         , color: argumentHead.color
+        , y
         }
     pure $ NonEmptyArray.cons resultShape $ functionShapes <> argument
     where
@@ -226,7 +244,7 @@ freshColor = do
   case LazyList.uncons state.colors of
     Just { head, tail } -> do
       put { colors: tail }
-      pure $ spy "Generated" head
+      pure head
     -- TODO: don't do stupid stuff like this
     Nothing -> pure "black"
 

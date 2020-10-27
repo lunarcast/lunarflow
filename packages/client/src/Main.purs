@@ -40,9 +40,8 @@ geometryBenchmarks =
         )
     $ profileApplication "Grouping expression" groupExpression
     $ profileApplication "Adding de-brujin indices" withDebrujinIndices
-    $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f .(\x. f x x)  (\x. f x x)"""
+    $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f .(\x. x x)  (\x. f (x x))"""
 
--- $ unsafeParseLambdaCalculus """\f x y. f y x \x -> y x"""
 main :: Effect Unit
 main = do
   canvas <- getCanvasElementById "canvas"
