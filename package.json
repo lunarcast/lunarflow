@@ -36,5 +36,6 @@
   "dependencies": {
     "@thi.ng/geom": "^1.13.0",
     "@thi.ng/hiccup-canvas": "^1.1.10"
-  }
+  },
+  "sideEffects": false
 }

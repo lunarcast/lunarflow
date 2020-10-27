@@ -52,7 +52,7 @@ withHeights = cata algebra
       where
       (Tuple slice remaining) = splitMap (List.length args) bodyMeasures
 
-      measures = updateMap 0 position (sum slice) remaining
+      measures = updateMap 0 position (sum slice + 1) remaining
 
       yLambda = lambda { position, args, heights: slice } body
     Var { index, position } -> Tuple yVar yMap
