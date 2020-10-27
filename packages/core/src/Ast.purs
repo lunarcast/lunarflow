@@ -15,12 +15,12 @@ module Lunarflow.Ast
 import Prelude
 import Control.Monad.Reader (Reader, asks, local, runReader)
 import Data.Debug (class Debug, genericDebug)
-import Lunarflow.Mu (Mu)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.List as List
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
+import Lunarflow.Mu (Mu, TacitRepr)
 import Matryoshka (class Corecursive, Algebra, GAlgebra, cata, embed, para, project)
 
 -- | The meat and potatoes of representing an expression.
@@ -40,7 +40,7 @@ derive instance functorAst :: Functor (AstF v c l)
 instance showAst :: (Show v, Show c, Show l, Show f) => Show (AstF v c l f) where
   show = genericShow
 
-instance debugAst :: (Debug v, Debug c, Debug l, Debug r) => Debug (AstF v c l r) where
+instance debugAst :: (Debug v, Debug c, Debug l) => Debug (AstF v c l TacitRepr) where
   debug = genericDebug
 
 -- | The fixpoint of the ast functor.
