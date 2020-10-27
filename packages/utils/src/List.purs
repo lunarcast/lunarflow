@@ -5,14 +5,14 @@ import Data.List (List(..), length, mapWithIndex, (!!), (..), (:))
 import Data.Maybe (fromMaybe)
 import Data.Tuple (Tuple(..))
 
--- | Merge 2 lists elements by element.
+-- | Merge 2 lists element by element.
 merge :: forall a. (a -> a -> a) -> List a -> List a -> List a
 merge f = case _, _ of
   Nil, list -> list
   list, Nil -> list
   (x : xs), (y : ys) -> f x y : merge f xs ys
 
--- | Kinda lika List.insert but adds an arbitrary empty value as much
+-- | Kinda like List.insert but adds an arbitrary empty value as much
 -- | as needed until the value we want to add can actually be inserted safely.
 with :: forall a. Int -> a -> a -> List a -> List a
 with index empty value list =
