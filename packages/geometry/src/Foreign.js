@@ -7,13 +7,11 @@ exports.mkRect = (attribs) => ({ x, y, width, height }) =>
 exports.mkCircle = (attribs) => ({ x, y, radius }) =>
   geom.circle([x, y], radius, attribs)
 
-exports.mkPolygon = (attribs) => (points) =>
-  geom.polygon(
-    points.map(({ x, y }) => [x, y]),
-    attribs
-  )
+exports.mkPolygon = (attribs) => (points) => geom.polygon(points, attribs)
 
 exports.mkGroup = (attribs) => (shapes) => geom.group(attribs, shapes)
+
+exports.mkLine = (attribs) => ({ from, to }) => geom.line(from, to, attribs)
 
 exports.translate = geom.translate
 
