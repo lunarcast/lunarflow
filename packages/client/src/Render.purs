@@ -11,13 +11,13 @@ import Data.List.Lazy as LazyList
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Ord (abs)
 import Data.Set as Set
-import Data.Traversable (sequence)
+import Data.Traversable (sequence, sum)
 import Data.Tuple (Tuple(..))
 import Data.Typelevel.Num (d0, d1)
 import Data.Unfoldable (replicate)
 import Data.Vec (vec2, (!!))
-import Debug.Trace (spy)
-import Lunarflow.Ast (AstF(..), isVar)
+import Debug.Trace (trace, traceM)
+import Lunarflow.Ast (AstF(..), isVar, lambda)
 import Lunarflow.Geometry.Foreign (getRightBound)
 import Lunarflow.Geometry.Foreign as ForeignShape
 import Lunarflow.Geometry.Types (Bounds)
@@ -25,7 +25,7 @@ import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
 import Lunarflow.Pipe ((|>))
 import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, colors, lineHeight, linePadding, lineWidth, unitHeight)
-import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMapSlice)
+import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMeasures)
 import Lunarflow.Vector as Vector
 import Matryoshka (GAlgebra, para, project)
 import Run (Run, extract)
@@ -36,7 +36,7 @@ type RenderContext
   = { doNotRender :: Set.Set Int
     , start :: Int
     , end :: Int
-    , slices :: List.List YMapSlice
+    , slices :: List.List YMeasures
     , colors :: List.List String
     , yOffsets :: List.List Int
     }
@@ -81,31 +81,38 @@ shiftScope amount shape =
     }
 
 -- | Renders a layout using the Render monad.
-render :: forall r. YLayout -> RenderM r Shape.Shape
-render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
+render :: forall r. Tuple YLayout YMeasures -> RenderM r Shape.Shape
+render (Tuple layout rootMeasures) =
+  layout
+    |> para algebra
+    |> local (_ { slices = List.singleton rootMeasures })
+    |> map (map _.shape >>> Shape.fromFoldable)
+    |> map (Shape.Translate (vec2 5 10))
   where
   algebra :: GAlgebra (Tuple YLayout) YLayoutF (RenderM r RenderList)
-  algebra (Lambda { args, heights, position } (Tuple _ body)) = do
+  algebra (Lambda data'@{ args, heights, position } (Tuple bodyLayout body)) = do
     slices <- ask <#> _.slices
+    yOffset <- getYOffset 0
     --
+    traceM $ "Function  w " <> show (List.length args) <> " arguments"
     let
       argCount = List.length args
 
-      yOffset = lineHeight / 2 + getY 0 position slices
+      updatedYOffset = yOffset + getLayoutY (lambda data' bodyLayout) slices
     --
     newColors <- sequence $ replicate argCount freshColor
-    bodyShapes <-
-      inScope argCount
-        <$> local
-            ( updateContext
-                { argCount
-                , newColors
-                , yOffset
-                }
-            )
-            body
-    --
+    rawBodyShapes <-
+      local
+        ( updateContext
+            { argCount
+            , newColors
+            , yOffset: updatedYOffset
+            }
+        )
+        body
     let
+      bodyShapes = inScope argCount rawBodyShapes
+
       bodyHead = Array.head bodyShapes.yes
     --
     color <- maybe freshColor (_.color >>> pure) bodyHead
@@ -114,26 +121,53 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
       shapesInScope :: Array Shape.Shape
       shapesInScope = _.shape <$> bodyShapes.yes
 
-      bounds :: Bounds
-      bounds = ForeignShape.bounds $ Shape.fromFoldable shapesInScope
+      maybeBounds :: Maybe Bounds
+      maybeBounds = ForeignShape.bounds $ Shape.fromFoldable shapesInScope
+
+      y :: Int
+      y =
+        maybe
+          ( updatedYOffset + ((argCount - 1) * unitHeight + linePadding)
+              / 2
+          )
+          _.y
+          bodyHead
+
+      -- y = maybe 30 _.y bodyHead
+      functionShape = case maybeBounds of
+        Just bounds ->
+          Shape.rect
+            { stroke: color
+            , weight: 5.0
+            }
+            $ bounds
+                { y = updatedYOffset
+                , height = bounds.height + 2 * linePadding
+                }
+        Nothing ->
+          Shape.rect
+            { stroke: color
+            , weight: 5.0
+            }
+            $ { x: 0
+              , y: updatedYOffset
+              , height: argCount * unitHeight
+              , width:
+                rawBodyShapes
+                  |> map _.shape
+                  |> Shape.fromFoldable
+                  |> getRightBound
+                  |> fromMaybe lineWidth
+              }
 
       result :: ScopedShape
       result =
         { shape:
           Shape.group {}
-            $ Array.cons
-                ( Shape.rect
-                    { stroke: color
-                    }
-                    $ bounds
-                        { y = bounds.y - linePadding
-                        , height = bounds.height + 2 * linePadding
-                        }
-                )
-                shapesInScope
+            $ Array.cons functionShape shapesInScope
         , scope: 0
         , color
-        , y: maybe 0 _.y bodyHead
+        , y
         }
     pure $ NonEmptyArray.cons' result $ shiftScope argCount <$> bodyShapes.no
     where
@@ -152,7 +186,7 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
     let
       color = fromMaybe "black" (List.index colors index)
 
-      y = yOffset + linePadding + getY index position slices
+      y = yOffset + linePadding + getY index position 1 slices
     pure
       $ NonEmptyArray.singleton
           if (Set.member index doNotRender) then
@@ -190,6 +224,7 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
             |> map _.shape
             |> Shape.fromFoldable
             |> getRightBound
+            |> fromMaybe 0
     argument <- renderFn functionEnd mkArg
     let
       argumentEnd :: Int
@@ -198,6 +233,7 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
           |> map _.shape
           |> Shape.fromFoldable
           |> getRightBound
+          |> fromMaybe 0
 
       functionHead :: ScopedShape
       functionHead = NonEmptyArray.head function
@@ -206,7 +242,7 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
       argumentHead = NonEmptyArray.head argument
 
       y :: Int
-      y = yOffset + linePadding + getY 0 position slices
+      y = yOffset + linePadding + getY 0 position 1 slices
 
       sameDirection :: Boolean
       sameDirection = compare argumentHead.y functionHead.y == compare functionHead.y y
@@ -220,13 +256,20 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
       middleY :: Int
       middleY = functionHead.y + (lineHeight - diagonalHeight) / 2
 
+      up :: Boolean
+      up = functionHead.y > argumentHead.y
+
       diagonal =
         mkDiagonal
           { tanAngle: callAngleTangent
           , diagonalWidth: lineHeight
           , x: argumentEnd
           , y0: argumentHead.y
-          , y1: if sameDirection then middleY else functionHead.y
+          , y1:
+            if not sameDirection then
+              functionHead.y
+            else
+              if up then middleY - diagonalHeight else middleY
           }
 
       continuationWidth :: Int
@@ -271,7 +314,11 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
           { tanAngle: callAngleTangent
           , diagonalWidth: lineHeight
           , x: diagonal.x1 + diagonal.delta !! d0
-          , y0: if sameDirection then middleY - diagonalHeight else functionHead.y
+          , y0:
+            if not sameDirection then
+              functionHead.y
+            else
+              if up then middleY else middleY - diagonalHeight
           , y1: y
           }
 
@@ -282,14 +329,17 @@ render = para algebra >>> map (map _.shape >>> Shape.fromFoldable)
         , color: functionHead.color
         , shape:
           Shape.group {}
-            [ Shape.polygon { fill: argumentHead.color, alpha: 0.5 }
-                diagonal.points
-            , Shape.polygon
-                { fill: functionHead.color
-                , alpha: 0.5
-                }
-                diagonal'.points
-            ]
+            $ [ Shape.polygon { fill: argumentHead.color }
+                  diagonal.points
+              ]
+            <> if argumentHead.y == functionHead.y then
+                []
+              else
+                [ Shape.polygon
+                    { fill: functionHead.color
+                    }
+                    diagonal'.points
+                ]
         }
 
       resultShape :: ScopedShape
@@ -344,13 +394,29 @@ callDiagonalOpposite up = Vector.add offset
   direction = if up then 1.0 else -1.0
 
 -- | Get the y position based on an index and a (relative) position.
-getY :: (Label "index" => Int) -> (Label "position" => Int) -> List.List YMapSlice -> Int
-getY index position slices = unitHeight * units
+getY ::
+  (Label "index" => Int) ->
+  (Label "position" => Int) ->
+  (Label "height" => Int) ->
+  List.List YMeasures -> Int
+getY index position height slices =
+  trace
+    { units
+    , left
+    , index
+    , position
+    , slices
+    , height
+    } \_ -> unitHeight * units + unitHeight / 2 * (left - height)
   where
-  units =
+  (Tuple units left) =
     foldrWithIndex
-      (\index' height result -> if position <= index' then result else result + height)
-      0
+      ( \index' height' result@(Tuple heightResult availibleResult) -> case compare position index' of
+          LT -> result
+          EQ -> Tuple heightResult height'
+          GT -> Tuple (heightResult + height') availibleResult
+      )
+      (Tuple 0 1)
       $ fromMaybe []
       $ List.index slices index
 
@@ -403,11 +469,11 @@ getYOffset :: forall r. Int -> RenderM r Int
 getYOffset at = ask <#> (_.yOffsets >>> flip List.index at >>> fromMaybe 0)
 
 -- | Get the y position from a YLayout by inferring the correct scope. 
-getLayoutY :: YLayout -> List.List YMapSlice -> Int
+getLayoutY :: YLayout -> List.List YMeasures -> Int
 getLayoutY layout slices = case project layout of
-  Var { index, position } -> getY index position slices
-  Call position _ _ -> getY 0 position slices
-  Lambda { position } _ -> getY 0 position slices
+  Var { index, position } -> getY index position 1 slices
+  Call position _ _ -> getY 0 position 1 slices
+  Lambda { position, heights } _ -> getY 0 position (sum heights) slices
 
 -- | Run a computation in the render monad.
 runRenderM :: forall a. RenderM () a -> a
