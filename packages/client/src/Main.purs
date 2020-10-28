@@ -8,7 +8,7 @@ import Debug.Trace (spy)
 import Effect (Effect)
 import Effect.Console as Console
 import Graphics.Canvas (getCanvasElementById, getContext2D)
-import Lunarbox.Render (render, runRenderM)
+import Lunarflow.Render (render, runRenderM)
 import Lunarflow.Ast (withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
 import Lunarflow.Geometry.Foreign (Geometry, fromShape, renderGeometry)
