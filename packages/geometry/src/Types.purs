@@ -21,6 +21,7 @@ type TransformMatrix
 type CommonAttribs
   = { fill :: Opt String
     , stroke :: Opt String
+    , weight :: Opt Number
     , transform :: Opt TransformMatrix
     , setTransform :: Opt TransformMatrix
     , translate :: Opt Vec2
@@ -94,3 +95,6 @@ fromFoldable = Array.fromFoldable >>> go
   go [ v ] = v
 
   go more = Group (unsafeCoerce {}) more
+
+------ Typeclass instances
+derive instance eqShape :: Eq Shape

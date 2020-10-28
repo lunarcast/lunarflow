@@ -10,6 +10,7 @@
   , "typelevel"
   , "sized-vectors"
   , "functions"
+  , "nullable"
   , "undefined-is-not-a-problem"
   , "lunarflow-utils"
   ]

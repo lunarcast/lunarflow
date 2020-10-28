@@ -8,10 +8,13 @@ module Lunarflow.Geometry.Foreign
 
 import Prelude
 import Data.Function.Uncurried (Fn2, runFn2)
+import Data.Maybe (Maybe)
+import Data.Nullable as Nullable
 import Effect (Effect)
 import Graphics.Canvas (Context2D)
 import Lunarflow.Geometry.Types (Bounds, CircleAttribs, CommonAttribs, PolygonAttribs, Shape(..), LineAttribs)
 import Lunarflow.Vector (Vec2)
+import Unsafe.Coerce (unsafeCoerce)
 
 -- | @thi.ng/geom Geometry representation.
 foreign import data Geometry :: Type
@@ -25,16 +28,16 @@ fromShape = case _ of
   Line attribs data' -> mkLine attribs data'
   Group attribs shapes -> mkGroup attribs $ fromShape <$> shapes
   Translate amount shape -> runFn2 translate (fromShape shape) amount
-  Null -> nullGeometry
+  Null -> mkGroup (unsafeCoerce {}) []
 
 -- | Find the smallest rect some shapes fit in.
-bounds :: Shape -> Bounds
-bounds = fromShape >>> boundsImpl
+bounds :: Shape -> Maybe Bounds
+bounds = fromShape >>> boundsImpl >>> Nullable.toMaybe
 
 -- TODO: more efficient way
 -- | Get the rightmost point in a shape 
-getRightBound :: Shape -> Int
-getRightBound = (\{ width, x } -> x + width) <<< bounds
+getRightBound :: Shape -> Maybe Int
+getRightBound = map (\{ width, x } -> x + width) <<< bounds
 
 foreign import mkRect :: CommonAttribs -> Bounds -> Geometry
 
@@ -52,4 +55,4 @@ foreign import renderGeometry :: Geometry -> Context2D -> Effect Unit
 
 foreign import translate :: Fn2 Geometry Vec2 Geometry
 
-foreign import boundsImpl :: Geometry -> Bounds
+foreign import boundsImpl :: Geometry -> Nullable.Nullable Bounds

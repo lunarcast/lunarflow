@@ -20,6 +20,9 @@ exports.renderGeometry = (shape) => (ctx) => () => hiccupCanvas.draw(ctx, shape)
 exports.boundsImpl = (shape) => {
   const dest = geom.bounds(shape)
 
+  // TODO: less hacky solution.
+  if (dest === undefined) return null
+
   return {
     x: dest.pos[0],
     y: dest.pos[1],
