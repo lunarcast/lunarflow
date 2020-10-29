@@ -1,7 +1,5 @@
 module Lunarflow.Label where
 
-import Prim.TypeError (class Warn, Above, Beside, QuoteLabel, Text)
-
 -- TODO: Think more about how good / bad of an idea this is.
 -- WARNING: Don't use this for actual docs, just for conveying 
 -- a small amoung of info to the programmer which actually calls the function.
@@ -9,9 +7,14 @@ import Prim.TypeError (class Warn, Above, Beside, QuoteLabel, Text)
 class Label (a :: Symbol)
 
 instance label ::
-  Warn
-      ( Above
-          (Text "TODO: create a newtype instead of using the label ")
-          (Beside (Text "    \"") (Beside (QuoteLabel a) (Text "\"")))
-      ) =>
+  --   Warn
+  
+  --       ( Above
+  
+  --           (Text "TODO: create a newtype instead of using the label ")
+  
+  --           (Beside (Text "    \"") (Beside (QuoteLabel a) (Text "\"")))
+  
+  --       ) =>
+  
   Label a

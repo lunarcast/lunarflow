@@ -3,6 +3,7 @@ module Lunarflow.Geometry.Foreign
   , fromShape
   , renderGeometry
   , bounds
+  , boundsImpl
   , getRightBound
   ) where
 

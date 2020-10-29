@@ -47,6 +47,7 @@ type RenderM
 
 type RenderList
   = { shapes :: Array Shape.Shape
+    , overlays :: Array Shape.Shape
     , color :: String
     , lineY :: Int
     , maxX :: Int
@@ -59,7 +60,7 @@ render (Tuple layout rootMeasures) =
   layout
     |> cata algebra
     |> local (_ { slices = [ rootMeasures ] })
-    |> map (_.shapes >>> Shape.fromFoldable)
+    |> map ((\{ shapes, overlays } -> shapes <> overlays) >>> Shape.fromFoldable)
     |> map (Shape.Translate (vec2 5 10))
   where
   algebra :: Algebra YLayoutF (RenderM RenderList)
@@ -115,7 +116,8 @@ render (Tuple layout rootMeasures) =
 
       renderList :: RenderList
       renderList =
-        { shapes: [ lambdaShape ] <> bodyRenderList.shapes
+        { shapes: bodyRenderList.shapes
+        , overlays: [ lambdaShape ] <> bodyRenderList.overlays
         , color: bodyRenderList.color
         , lineY
         , maxX: xStart + width
@@ -145,6 +147,7 @@ render (Tuple layout rootMeasures) =
       { color
       , lineY: y
       , maxX: start + width
+      , overlays: []
       , shapes:
         [ Shape.rect
             { fill: color
@@ -267,7 +270,8 @@ render (Tuple layout rootMeasures) =
         { color: function.color
         , lineY
         , maxX: diagonal'.x1 + lineTipWidth
-        , shapes: argument.shapes <> [ callDiagonal, resultShape ] <> functionShapes <> [ callCircle ]
+        , shapes: argument.shapes <> [ callDiagonal, resultShape ] <> functionShapes
+        , overlays: [ callCircle ] <> argument.overlays <> function.overlays
         }
     pure renderList
 
