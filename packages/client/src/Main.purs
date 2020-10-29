@@ -3,16 +3,16 @@ module Main where
 import Prelude
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Debug.Trace (spy)
+import Debug.Trace (trace)
 import Effect (Effect)
 import Effect.Console as Console
 import Graphics.Canvas (getCanvasElementById, getContext2D)
-import Lunarflow.Ast (withDebrujinIndices)
+import Lunarflow.Ast (call, printDeBrujin, withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
 import Lunarflow.Debug (debugSpy)
+import Lunarflow.Examples (exp, mult, n, plus', zero')
 import Lunarflow.Geometry.Foreign (Geometry, fromShape, renderGeometry)
 import Lunarflow.Layout (addIndices, runLayoutM, unscopeLayout)
-import Lunarflow.Parser (unsafeParseLambdaCalculus)
 import Lunarflow.Profile (profileApplication)
 import Lunarflow.Render (render, runRenderM)
 import Lunarflow.Renderer.WithHeight (withHeights)
@@ -21,7 +21,7 @@ import Partial.Unsafe (unsafeCrashWith)
 geometryBenchmarks :: Effect Geometry
 geometryBenchmarks =
   profileApplication "Converting shape to geometry" fromShape
-    $ profileApplication "Rendering layout" (spy "hmmm" <<< runRenderM <<< render)
+    $ profileApplication "Rendering layout" (runRenderM <<< render)
     $ map debugSpy
     $ profileApplication "Adding height data" withHeights
     $ map
@@ -31,21 +31,32 @@ geometryBenchmarks =
         )
     $ profileApplication "Creating layout"
         ( runLayoutM
-            -- <<< map (spy "unscoped")
-            
             <<< unscopeLayout
-            -- <<< map debugSpy
-            
             <<< addIndices
         )
     $ profileApplication "Grouping expression" groupExpression
+    $ map
+        ( \a ->
+            trace (printDeBrujin a) \_ ->
+              a
+        )
     $ profileApplication "Adding de-brujin indices" withDebrujinIndices
     -- $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f .(\x. x x)  (\x. f (x x))"""
     
     -- $ profileApplication "Parsing" unsafeParseLambdaCalculus """\n s z. n (\g h. h (g s)) (\u. z) (\u. u)"""
     
-    $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f a b. f b a (\u. f) (\u. u) """
+    $ call unit (call unit plus' (n 3))
+        ( call unit (call unit mult (n 7))
+            ( call unit (call unit exp (n 2))
+                (zero')
+            )
+        )
 
+-- $ call
+--     unit
+--     (call unit exp (n 2))
+--     zero'
+-- $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f a b. f b a (\u. f) (\u. u) """
 main :: Effect Unit
 main = do
   canvas <- getCanvasElementById "canvas"

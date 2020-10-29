@@ -12,7 +12,6 @@ import Data.Array as Array
 import Data.Foldable (sum)
 import Data.List (List) as List
 import Data.Tuple (Tuple(..), uncurry)
-import Debug.Trace (spy)
 import Lunarflow.Array (maxZip)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Label (class Label)
@@ -45,7 +44,7 @@ withHeights = cata algebra
     Lambda { position, args } (Tuple body rawHeights) -> Tuple yLambda measures
       where
       heights =
-        mergeArrays (spy "slice" rawHeights)
+        mergeArrays rawHeights
           $ foldr mergeArrays []
           $ args
           <#> \x -> createArray x 1 []

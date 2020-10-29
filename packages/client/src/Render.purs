@@ -2,6 +2,8 @@
 module Lunarflow.Render where
 
 import Prelude
+import Control.MonadZero (guard)
+import Data.Array as Arary
 import Data.Array as Array
 import Data.FoldableWithIndex (foldrWithIndex)
 import Data.Int (floor, toNumber)
@@ -9,48 +11,39 @@ import Data.List as List
 import Data.List.Lazy as LazyList
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
-import Data.Set as Set
 import Data.Traversable (sequence, sum)
 import Data.Tuple (Tuple(..))
 import Data.Typelevel.Num (d0, d1)
-import Data.Unfoldable (replicate)
 import Data.Vec (vec2, (!!))
-import Lunarflow.Ast (AstF(..), lambda)
+import Lunarflow.Ast (AstF(..))
 import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
 import Lunarflow.Pipe ((|>))
 import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, colors, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
 import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMeasures)
 import Lunarflow.Vector as Vector
-import Matryoshka (GAlgebra, para, project)
+import Matryoshka (Algebra, cata)
 import Run (Run, extract)
 import Run.Reader (READER, ask, local, runReader)
 import Run.State (STATE, evalState, get, put)
 
 type RenderContext
-  = { doNotRender :: Set.Set Int
-    , starts :: List.List Int
+  = { starts :: Array Int
     , xStart :: Int
-    , slices :: List.List YMeasures
-    , colors :: List.List String
-    , yOffsets :: List.List Int
+    , slices :: Array YMeasures
+    , colors :: Array String
+    , yOffsets :: Array Int
     }
 
 type RenderState
   = { colors :: LazyList.List String
-    , x :: Int
     }
 
-type RenderM r
+type RenderM
   = Run
       ( reader :: READER RenderContext
       , state :: STATE RenderState
-      | r
       )
-
--- | Prepare stuff for rendering inside a lambda.
-shiftContext :: Int -> RenderContext -> RenderContext
-shiftContext by ctx = ctx { doNotRender = ((+) by) `Set.map` ctx.doNotRender }
 
 type RenderList
   = { shapes :: Array Shape.Shape
@@ -61,28 +54,26 @@ type RenderList
 
 -- TODO: error handling
 -- | Renders a layout using the Render monad.
-render :: forall r. Tuple YLayout YMeasures -> RenderM r Shape.Shape
+render :: Tuple YLayout YMeasures -> RenderM Shape.Shape
 render (Tuple layout rootMeasures) =
   layout
-    -- TODO: see if we can get this to work with cata only
-    
-    |> para algebra
-    |> local (_ { slices = List.singleton rootMeasures })
+    |> cata algebra
+    |> local (_ { slices = [ rootMeasures ] })
     |> map (_.shapes >>> Shape.fromFoldable)
     |> map (Shape.Translate (vec2 5 10))
   where
-  algebra :: GAlgebra (Tuple YLayout) YLayoutF (RenderM r RenderList)
-  algebra (Lambda data'@{ args, heights, position } (Tuple bodyLayout body)) = do
-    slices <- ask <#> _.slices
+  algebra :: Algebra YLayoutF (RenderM RenderList)
+  algebra (Lambda data'@{ args, heights, position } body) = do
     xStart <- ask <#> _.xStart
+    slices <- ask <#> _.slices
     yOffset <- getYOffset 0
     --
     let
       argCount = List.length args
 
-      updatedYOffset = yOffset + getLayoutY (lambda data' bodyLayout) slices
+      updatedYOffset = yOffset + getY 0 position (sum heights) slices
     --
-    newColors <- sequence $ replicate argCount freshColor
+    newColors <- sequence $ Array.replicate argCount freshColor
     bodyRenderList <-
       local
         ( updateContext
@@ -110,7 +101,6 @@ render (Tuple layout rootMeasures) =
 
       width = max (bodyRenderList.maxX - xStart) lineWidth
 
-      -- rawHead = NonEmptyArray.head rawBodyShapess
       lambdaShape :: Shape.Shape
       lambdaShape =
         Shape.rect
@@ -134,11 +124,10 @@ render (Tuple layout rootMeasures) =
     where
     updateContext { argCount, newColors, yOffset, start } ctx =
       ctx
-        { slices = (replicate argCount heights) <> ctx.slices
-        , doNotRender = ((+) argCount) `Set.map` ctx.doNotRender
+        { slices = (Arary.replicate argCount heights) <> ctx.slices
         , colors = newColors <> ctx.colors
-        , yOffsets = replicate argCount yOffset <> ctx.yOffsets
-        , starts = replicate argCount start <> ctx.starts
+        , yOffsets = Array.replicate argCount yOffset <> ctx.yOffsets
+        , starts = Array.replicate argCount start <> ctx.starts
         }
 
   algebra (Var { position, index }) = do
@@ -147,7 +136,7 @@ render (Tuple layout rootMeasures) =
     start <- getStart index
     -- TODO: don't do stupid stuff like this
     let
-      color = fromMaybe "black" (List.index colors index)
+      color = fromMaybe "black" (Array.index colors index)
 
       y = yOffset + linePadding + getY index position 1 slices
 
@@ -168,7 +157,7 @@ render (Tuple layout rootMeasures) =
         ]
       }
 
-  algebra (Call position (Tuple _ mkFunc) (Tuple _ mkArg)) = do
+  algebra (Call position mkFunc mkArg) = do
     -- Get stuff from the environment
     slices <- ask <#> _.slices
     yOffset <- getYOffset 0
@@ -245,20 +234,22 @@ render (Tuple layout rootMeasures) =
           , y1: lineY
           }
 
+      argumentDiagonal :: Array Shape.Shape
+      argumentDiagonal = do
+        guard $ argument.lineY /= function.lineY
+        pure
+          $ Shape.polygon
+              { fill: argument.color
+              }
+              diagonal.points
+
       callDiagonal :: Shape.Shape
       callDiagonal =
         Shape.group {}
-          $ [ Shape.polygon { fill: argument.color }
-                diagonal.points
+          $ argumentDiagonal
+          <> [ Shape.polygon { fill: function.color }
+                diagonal'.points
             ]
-          <> if argument.lineY == function.lineY then
-              []
-            else
-              [ Shape.polygon
-                  { fill: function.color
-                  }
-                  diagonal'.points
-              ]
 
       resultShape :: Shape.Shape
       resultShape =
@@ -276,7 +267,7 @@ render (Tuple layout rootMeasures) =
         { color: function.color
         , lineY
         , maxX: diagonal'.x1 + lineTipWidth
-        , shapes: [ resultShape, callDiagonal ] <> argument.shapes <> functionShapes <> [ callCircle ]
+        , shapes: argument.shapes <> [ callDiagonal, resultShape ] <> functionShapes <> [ callCircle ]
         }
     pure renderList
 
@@ -293,7 +284,7 @@ freshColor = do
 getStart :: forall r. Int -> Run ( reader :: READER RenderContext | r ) Int
 getStart x = ado
   starts <- ask <#> _.starts
-  in case List.index starts x of
+  in case Array.index starts x of
     Just r -> r
     Nothing -> 0
 
@@ -314,7 +305,7 @@ getY ::
   (Label "index" => Int) ->
   (Label "position" => Int) ->
   (Label "height" => Int) ->
-  List.List YMeasures -> Int
+  Array YMeasures -> Int
 getY index position height slices = unitHeight * units + unitHeight / 2 * (left - height)
   where
   (Tuple units left) =
@@ -326,7 +317,7 @@ getY index position height slices = unitHeight * units + unitHeight / 2 * (left 
       )
       (Tuple 0 1)
       $ fromMaybe []
-      $ List.index slices index
+      $ Array.index slices index
 
 mkDiagonal ::
   { y0 :: Int
@@ -373,32 +364,23 @@ mkDiagonal { y0, y1, x, tanAngle, diagonalWidth } = { points, x1: end' !! d0, of
     ]
 
 -- | Retrive an arbitrary y offset from the current environment
-getYOffset :: forall r. Int -> RenderM r Int
-getYOffset at = ask <#> (_.yOffsets >>> flip List.index at >>> fromMaybe 0)
-
--- | Get the y position from a YLayout by inferring the correct scope. 
-getLayoutY :: YLayout -> List.List YMeasures -> Int
-getLayoutY layout slices = case project layout of
-  Var { index, position } -> getY index position 1 slices
-  Call position _ _ -> getY 0 position 1 slices
-  Lambda { position, heights } _ -> getY 0 position (sum heights) slices
+getYOffset :: Int -> RenderM Int
+getYOffset at = ask <#> (_.yOffsets >>> flip Array.index at >>> fromMaybe 0)
 
 -- | Run a computation in the render monad.
-runRenderM :: forall a. RenderM () a -> a
+runRenderM :: forall a. RenderM a -> a
 runRenderM = evalState state >>> runReader ctx >>> extract
   where
   ctx :: RenderContext
   ctx =
-    { doNotRender: Set.empty
-    , slices: List.singleton mempty
-    , colors: List.Nil
-    , yOffsets: List.Nil
-    , starts: List.Nil
+    { slices: []
+    , colors: []
+    , yOffsets: []
+    , starts: []
     , xStart: 0
     }
 
   state :: RenderState
   state =
     { colors: colors
-    , x: 0
     }

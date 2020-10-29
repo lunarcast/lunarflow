@@ -25,11 +25,13 @@ colors :: LazyList.List String
 colors =
   LazyList.cycle
     $ LazyList.fromFoldable
-        [ "#BBB684"
-        , "#F37878"
-        , "#21BEE0"
-        , "#AA59AB"
-        , "#38F461"
+        [ "#fe444e"
+        , "#62c89d"
+        , "#ff7edb"
+        , "#ee9d28"
+        , "#1e88e5"
+        , "#6af1b8"
+        , "#abaaaf"
         ]
 
 callAngle :: Radians

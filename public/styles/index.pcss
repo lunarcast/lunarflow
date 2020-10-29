@@ -1,16 +1,17 @@
+$bg: #262335;
+
 html,
 body {
   padding: 0;
   margin: 0;
+
+  // TODO: idk, this feels kinda hacky
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 
-body {
-  font-family: "Material Icons";
-}
-
-$green: green;
-
-h1 {
-  font-family: "Varela Round";
-  color: $green;
+canvas {
+  background: $bg;
+  width: 100%;
 }
