@@ -14,6 +14,7 @@ devDependencies:
   nodemon: 2.0.4
   postcss: 8.1.1
   postcss-cli: 8.1.0_postcss@8.1.1
+  postcss-comment: 2.0.0
   postcss-font-magician: 2.3.1
   postcss-import: 12.0.1
   postcss-preset-env: 6.7.0
@@ -4307,6 +4308,12 @@ packages:
       node: '>=6.9.0'
     resolution:
       integrity: sha512-WyQFAdDZpExQh32j0U0feWisZ0dmOtPl44qYmJKkq9xFWY3p+4qnRzCHeNrkeRhwPHz9bQ3mo0/yVkaply0MNw==
+  /postcss-comment/2.0.0:
+    dependencies:
+      postcss: 6.0.23
+    dev: true
+    resolution:
+      integrity: sha512-5zT5iKU7c0tK9KJFNrVf+g1MGTkzf/4V3e0Zzm2g1uoFQC5jeTHmB9O1iAqh97+jnKpc6al204e0pwFUiCwseg==
   /postcss-convert-values/4.0.1:
     dependencies:
       postcss: 7.0.35
@@ -4903,6 +4910,16 @@ packages:
     dev: true
     resolution:
       integrity: sha1-TESbTIr53zyvbTf44eV10DYXWNw=
+  /postcss/6.0.23:
+    dependencies:
+      chalk: 2.4.2
+      source-map: 0.6.1
+      supports-color: 5.5.0
+    dev: true
+    engines:
+      node: '>=4.0.0'
+    resolution:
+      integrity: sha512-soOk1h6J3VMTZtVeVpv15/Hpdl2cBLX3CAw4TAbkpTJiNPk9YP/zWcD1ND+xEtvyuuvKzbxliTOIyvkSeSJ6ag==
   /postcss/7.0.35:
     dependencies:
       chalk: 2.4.2
@@ -6288,6 +6305,7 @@ specifiers:
   nodemon: ^2.0.4
   postcss: ^8.1.1
   postcss-cli: ^8.1.0
+  postcss-comment: ^2.0.0
   postcss-font-magician: ^2.3.1
   postcss-import: ^12.0.1
   postcss-preset-env: ^6.7.0
