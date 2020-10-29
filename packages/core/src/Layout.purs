@@ -31,7 +31,6 @@ import Data.Ord (abs)
 import Data.Set as Set
 import Data.Traversable (for, minimumBy)
 import Data.Tuple (Tuple(..), fst, snd)
-import Debug.Trace (spy)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (GroupedExpression, references)
 import Lunarflow.List (indexed)
@@ -166,11 +165,12 @@ addIndices =
             , near = 0
             , currentScope = scope
             }
+      -- TODO: abstract this away.
       let
         -- This type annotation is here so the compiler
         -- knows which Unfoldable instance to use.
         referenced :: Array _
-        referenced = spy ("referenced ") $ Set.toUnfoldable $ references $ lambda vars groupedBody
+        referenced = Set.toUnfoldable $ references $ lambda vars groupedBody
       -- This holds all the variables referenced inside the body of the lambda
       inBody <- Set.fromFoldable <$> for referenced getVarPosition
       position <- ask <#> _.near >>= placeExpression inBody Everywhere
@@ -287,45 +287,44 @@ in case unused of
 placeExpression :: Set.Set Position -> LocationConstraint -> Int -> LayoutM Position
 placeExpression except constraint positionIndex = do
   ctx <- ask
-  if ctx.currentScope == Root then
-    pure $ Position 0 Root
-  else do
-    -- traceM { constraint, positionIndex }
-    positions <- currentIndexList
-    result <-
-      findLocation
-        { constraint
-        , positionIndex
-        , positions
-        , except:
-          (ctx.protected <> except)
-            |> Set.mapMaybe \(Position index scope) ->
-                if scope == ctx.currentScope then
-                  Just index
-                else
-                  Nothing
-        , scope: ctx.currentScope
-        }
-    case result of
-      At index -> pure $ Position index ctx.currentScope
-      NextTo position -> do
-        modify \state ->
-          state
-            { indexMap =
-              Map.update
-                ( map update
-                    >>> flip List.snoc (position + 1)
-                    >>> Just
-                )
-                ctx.currentScope
-                state.indexMap
-            }
-        indexList <- currentIndexList
-        pure $ Position (List.length indexList - 1) ctx.currentScope
-        where
-        update x
-          | x <= position = x
-          | otherwise = x + 1
+  -- if ctx.currentScope == Root then
+  --   pure $ Position 0 Root
+  -- else 
+  positions <- currentIndexList
+  result <-
+    findLocation
+      { constraint
+      , positionIndex
+      , positions
+      , except:
+        (ctx.protected <> except)
+          |> Set.mapMaybe \(Position index scope) ->
+              if scope == ctx.currentScope then
+                Just index
+              else
+                Nothing
+      , scope: ctx.currentScope
+      }
+  case result of
+    At index -> pure $ Position index ctx.currentScope
+    NextTo position -> do
+      modify \state ->
+        state
+          { indexMap =
+            Map.update
+              ( map update
+                  >>> flip List.snoc (position + 1)
+                  >>> Just
+              )
+              ctx.currentScope
+              state.indexMap
+          }
+      indexList <- currentIndexList
+      pure $ Position (List.length indexList - 1) ctx.currentScope
+      where
+      update x
+        | x <= position = x
+        | otherwise = x + 1
 
 -- | Get the absolute position described by a relative one.
 unscopePosition :: Position -> LayoutM Int
