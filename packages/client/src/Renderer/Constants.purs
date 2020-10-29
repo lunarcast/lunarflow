@@ -1,3 +1,4 @@
+-- TODO: docs
 module Lunarflow.Renderer.Constants where
 
 import Prelude
@@ -16,6 +17,9 @@ linePadding = (unitHeight - lineHeight) / 2
 
 lineWidth :: Int
 lineWidth = 200
+
+lineTipWidth :: Int
+lineTipWidth = 100
 
 colors :: LazyList.List String
 colors =

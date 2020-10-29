@@ -3,12 +3,11 @@ module Lunarflow.Render where
 
 import Prelude
 import Data.Array as Array
-import Data.Array.NonEmpty as NonEmptyArray
 import Data.FoldableWithIndex (foldrWithIndex)
 import Data.Int (floor, toNumber)
 import Data.List as List
 import Data.List.Lazy as LazyList
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
 import Data.Set as Set
 import Data.Traversable (sequence, sum)
@@ -16,15 +15,11 @@ import Data.Tuple (Tuple(..))
 import Data.Typelevel.Num (d0, d1)
 import Data.Unfoldable (replicate)
 import Data.Vec (vec2, (!!))
-import Debug.Trace (trace, traceM)
-import Lunarflow.Ast (AstF(..), isVar, lambda)
-import Lunarflow.Geometry.Foreign (getRightBound)
-import Lunarflow.Geometry.Foreign as ForeignShape
-import Lunarflow.Geometry.Types (Bounds)
+import Lunarflow.Ast (AstF(..), lambda)
 import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
 import Lunarflow.Pipe ((|>))
-import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, colors, lineHeight, linePadding, lineWidth, unitHeight)
+import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, colors, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
 import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMeasures)
 import Lunarflow.Vector as Vector
 import Matryoshka (GAlgebra, para, project)
@@ -34,8 +29,8 @@ import Run.State (STATE, evalState, get, put)
 
 type RenderContext
   = { doNotRender :: Set.Set Int
-    , start :: Int
-    , end :: Int
+    , starts :: List.List Int
+    , xStart :: Int
     , slices :: List.List YMeasures
     , colors :: List.List String
     , yOffsets :: List.List Int
@@ -43,6 +38,7 @@ type RenderContext
 
 type RenderState
   = { colors :: LazyList.List String
+    , x :: Int
     }
 
 type RenderM r
@@ -56,196 +52,135 @@ type RenderM r
 shiftContext :: Int -> RenderContext -> RenderContext
 shiftContext by ctx = ctx { doNotRender = ((+) by) `Set.map` ctx.doNotRender }
 
-type ScopedShape
-  = { scope :: Int
-    , shape :: Shape.Shape
-    , color :: String
-    , y :: Int
-    }
-
 type RenderList
-  = NonEmptyArray.NonEmptyArray ScopedShape
-
-inScope ::
-  Int ->
-  RenderList ->
-  { no :: Array ScopedShape
-  , yes :: Array ScopedShape
-  }
-inScope max = NonEmptyArray.partition (_.scope >>> (_ < max))
-
-shiftScope :: Int -> ScopedShape -> ScopedShape
-shiftScope amount shape =
-  shape
-    { scope = shape.scope - amount
+  = { shapes :: Array Shape.Shape
+    , color :: String
+    , lineY :: Int
+    , maxX :: Int
     }
 
+-- TODO: error handling
 -- | Renders a layout using the Render monad.
 render :: forall r. Tuple YLayout YMeasures -> RenderM r Shape.Shape
 render (Tuple layout rootMeasures) =
   layout
+    -- TODO: see if we can get this to work with cata only
+    
     |> para algebra
     |> local (_ { slices = List.singleton rootMeasures })
-    |> map (map _.shape >>> Shape.fromFoldable)
+    |> map (_.shapes >>> Shape.fromFoldable)
     |> map (Shape.Translate (vec2 5 10))
   where
   algebra :: GAlgebra (Tuple YLayout) YLayoutF (RenderM r RenderList)
   algebra (Lambda data'@{ args, heights, position } (Tuple bodyLayout body)) = do
     slices <- ask <#> _.slices
+    xStart <- ask <#> _.xStart
     yOffset <- getYOffset 0
     --
-    traceM $ "Function  w " <> show (List.length args) <> " arguments"
     let
       argCount = List.length args
 
       updatedYOffset = yOffset + getLayoutY (lambda data' bodyLayout) slices
     --
     newColors <- sequence $ replicate argCount freshColor
-    rawBodyShapes <-
+    bodyRenderList <-
       local
         ( updateContext
             { argCount
             , newColors
-            , yOffset: updatedYOffset
+            , yOffset:
+              updatedYOffset
+            , start: xStart
             }
         )
         body
-    let
-      bodyShapes = inScope argCount rawBodyShapes
-
-      bodyHead = Array.head bodyShapes.yes
-    --
-    color <- maybe freshColor (_.color >>> pure) bodyHead
     --
     let
-      shapesInScope :: Array Shape.Shape
-      shapesInScope = _.shape <$> bodyShapes.yes
+      height :: Int
+      height = (sum heights) * unitHeight
 
-      maybeBounds :: Maybe Bounds
-      maybeBounds = ForeignShape.bounds $ Shape.fromFoldable shapesInScope
+      lineY :: Int
+      lineY
+        | bodyRenderList.lineY > updatedYOffset + height
+            || bodyRenderList.lineY
+            < updatedYOffset =
+          updatedYOffset + ((argCount - 1) * unitHeight + linePadding)
+            / 2
+        | otherwise = bodyRenderList.lineY
 
-      y :: Int
-      y =
-        maybe
-          ( updatedYOffset + ((argCount - 1) * unitHeight + linePadding)
-              / 2
-          )
-          _.y
-          bodyHead
+      width = max (bodyRenderList.maxX - xStart) lineWidth
 
-      -- y = maybe 30 _.y bodyHead
-      functionShape = case maybeBounds of
-        Just bounds ->
-          Shape.rect
-            { stroke: color
-            , weight: 5.0
-            }
-            $ bounds
-                { y = updatedYOffset
-                , height = bounds.height + 2 * linePadding
-                }
-        Nothing ->
-          Shape.rect
-            { stroke: color
-            , weight: 5.0
-            }
-            $ { x: 0
-              , y: updatedYOffset
-              , height: argCount * unitHeight
-              , width:
-                rawBodyShapes
-                  |> map _.shape
-                  |> Shape.fromFoldable
-                  |> getRightBound
-                  |> fromMaybe lineWidth
-              }
+      -- rawHead = NonEmptyArray.head rawBodyShapess
+      lambdaShape :: Shape.Shape
+      lambdaShape =
+        Shape.rect
+          { stroke: bodyRenderList.color
+          , weight: 5.0
+          }
+          { y: updatedYOffset
+          , height
+          , x: xStart
+          , width
+          }
 
-      result :: ScopedShape
-      result =
-        { shape:
-          Shape.group {}
-            $ Array.cons functionShape shapesInScope
-        , scope: 0
-        , color
-        , y
+      renderList :: RenderList
+      renderList =
+        { shapes: [ lambdaShape ] <> bodyRenderList.shapes
+        , color: bodyRenderList.color
+        , lineY
+        , maxX: xStart + width
         }
-    pure $ NonEmptyArray.cons' result $ shiftScope argCount <$> bodyShapes.no
+    pure renderList
     where
-    updateContext { argCount, newColors, yOffset } ctx =
+    updateContext { argCount, newColors, yOffset, start } ctx =
       ctx
         { slices = (replicate argCount heights) <> ctx.slices
         , doNotRender = ((+) argCount) `Set.map` ctx.doNotRender
         , colors = newColors <> ctx.colors
         , yOffsets = replicate argCount yOffset <> ctx.yOffsets
+        , starts = replicate argCount start <> ctx.starts
         }
 
   algebra (Var { position, index }) = do
-    { end, start, slices, doNotRender, colors } <- ask
+    { xStart, slices, colors } <- ask
     yOffset <- getYOffset index
+    start <- getStart index
     -- TODO: don't do stupid stuff like this
     let
       color = fromMaybe "black" (List.index colors index)
 
       y = yOffset + linePadding + getY index position 1 slices
-    pure
-      $ NonEmptyArray.singleton
-          if (Set.member index doNotRender) then
-            { scope: 0
-            , color
-            , shape: Shape.Null
-            , y
-            }
-          else
-            { scope: index
-            , color
-            , y
-            , shape:
-              Shape.rect
-                { fill: color
-                }
-                { x: 0
-                , y
-                , height: lineHeight
-                , width: max lineWidth start
-                }
-            }
 
-  algebra (Call position mkFunc@(Tuple functionLayout _) mkArg@(Tuple argumentLayout _)) = do
-    function <- renderFn 0 mkFunc
+      width = max lineWidth (xStart - start)
+    pure
+      { color
+      , lineY: y
+      , maxX: start + width
+      , shapes:
+        [ Shape.rect
+            { fill: color
+            }
+            { x: start
+            , y
+            , height: lineHeight
+            , width: width
+            }
+        ]
+      }
+
+  algebra (Call position (Tuple _ mkFunc) (Tuple _ mkArg)) = do
+    -- Get stuff from the environment
     slices <- ask <#> _.slices
     yOffset <- getYOffset 0
+    --
+    function <- mkFunc
+    argument <- local _ { xStart = function.maxX } mkArg
     let
-      -- TODO: maybe make the call to getRightBound only include stuff in scope or something
-      functionEnd =
-        if isVar functionLayout then
-          0
-        else
-          function
-            |> map _.shape
-            |> Shape.fromFoldable
-            |> getRightBound
-            |> fromMaybe 0
-    argument <- renderFn functionEnd mkArg
-    let
-      argumentEnd :: Int
-      argumentEnd =
-        argument
-          |> map _.shape
-          |> Shape.fromFoldable
-          |> getRightBound
-          |> fromMaybe 0
-
-      functionHead :: ScopedShape
-      functionHead = NonEmptyArray.head function
-
-      argumentHead :: ScopedShape
-      argumentHead = NonEmptyArray.head argument
-
-      y :: Int
-      y = yOffset + linePadding + getY 0 position 1 slices
+      lineY :: Int
+      lineY = yOffset + linePadding + getY 0 position 1 slices
 
       sameDirection :: Boolean
-      sameDirection = compare argumentHead.y functionHead.y == compare functionHead.y y
+      sameDirection = compare argument.lineY function.lineY == compare function.lineY lineY
 
       diagonalHeight :: Int
       diagonalHeight = floor $ toNumber lineHeight * callAngleCosinus
@@ -254,60 +189,48 @@ render (Tuple layout rootMeasures) =
       diagonalWidth = floor $ toNumber lineHeight * callAngleSinus
 
       middleY :: Int
-      middleY = functionHead.y + (lineHeight - diagonalHeight) / 2
+      middleY = function.lineY + (lineHeight - diagonalHeight) / 2
 
       up :: Boolean
-      up = functionHead.y > argumentHead.y
+      up = function.lineY > argument.lineY
 
       diagonal =
         mkDiagonal
           { tanAngle: callAngleTangent
           , diagonalWidth: lineHeight
-          , x: argumentEnd
-          , y0: argumentHead.y
+          , x: argument.maxX
+          , y0: argument.lineY
           , y1:
             if not sameDirection then
-              functionHead.y
+              function.lineY
             else
               if up then middleY - diagonalHeight else middleY
           }
 
       continuationWidth :: Int
-      continuationWidth = diagonal.x1 + diagonalWidth / 2 - functionEnd
+      continuationWidth = diagonal.x1 + diagonalWidth / 2 - function.maxX
 
       functionContinuation :: Shape.Shape
       functionContinuation =
         Shape.rect
-          { fill: functionHead.color
+          { fill: function.color
           }
-          { x: functionEnd
+          { x: function.maxX
           , width: continuationWidth
           , height: lineHeight
-          , y: functionHead.y
+          , y: function.lineY
           }
 
-      callCircle :: ScopedShape
+      callCircle :: Shape.Shape
       callCircle =
-        { scope: functionHead.scope
-        , color: functionHead.color
-        , y: functionHead.y
-        , shape:
-          Shape.circle { fill: "green" }
-            { x: functionEnd + continuationWidth
-            , y: functionHead.y + lineHeight / 2
-            , radius: floor $ toNumber lineHeight * 0.7
-            }
-        }
-
-      functionShapes :: RenderList
-      functionShapes =
-        NonEmptyArray.cons
-          { scope: functionHead.scope
-          , shape: functionContinuation
-          , color: functionHead.color
-          , y: functionHead.y
+        Shape.circle { fill: "green" }
+          { x: function.maxX + continuationWidth
+          , y: function.lineY + lineHeight / 2
+          , radius: floor $ toNumber lineHeight * 0.7
           }
-          function
+
+      functionShapes :: Array Shape.Shape
+      functionShapes = Array.cons functionContinuation function.shapes
 
       diagonal' =
         mkDiagonal
@@ -316,70 +239,63 @@ render (Tuple layout rootMeasures) =
           , x: diagonal.x1 + diagonal.delta !! d0
           , y0:
             if not sameDirection then
-              functionHead.y
+              function.lineY
             else
               if up then middleY else middleY - diagonalHeight
-          , y1: y
+          , y1: lineY
           }
 
-      callDiagonal :: ScopedShape
+      callDiagonal :: Shape.Shape
       callDiagonal =
-        { scope: max argumentHead.scope functionHead.scope
-        , y
-        , color: functionHead.color
-        , shape:
-          Shape.group {}
-            $ [ Shape.polygon { fill: argumentHead.color }
-                  diagonal.points
+        Shape.group {}
+          $ [ Shape.polygon { fill: argument.color }
+                diagonal.points
+            ]
+          <> if argument.lineY == function.lineY then
+              []
+            else
+              [ Shape.polygon
+                  { fill: function.color
+                  }
+                  diagonal'.points
               ]
-            <> if argumentHead.y == functionHead.y then
-                []
-              else
-                [ Shape.polygon
-                    { fill: functionHead.color
-                    }
-                    diagonal'.points
-                ]
-        }
 
-      resultShape :: ScopedShape
+      resultShape :: Shape.Shape
       resultShape =
-        { scope: 0
-        , shape:
-          Shape.rect
-            { fill: functionHead.color
-            }
-            { x: diagonal'.x1
-            , width: lineWidth
-            , height: lineHeight
-            , y
-            }
-        , color: functionHead.color
-        , y
+        Shape.rect
+          { fill: function.color
+          }
+          { x: diagonal'.x1
+          , width: lineTipWidth
+          , height: lineHeight
+          , y: lineY
+          }
+
+      renderList :: RenderList
+      renderList =
+        { color: function.color
+        , lineY
+        , maxX: diagonal'.x1 + lineTipWidth
+        , shapes: [ resultShape, callDiagonal ] <> argument.shapes <> functionShapes <> [ callCircle ]
         }
-    pure $ flip NonEmptyArray.snoc callCircle
-      $ NonEmptyArray.cons' callDiagonal [ resultShape ]
-      <> argument
-      <> functionShapes
-    where
-    renderFn start (Tuple ast m) =
-      local
-        ( _
-            { start = start
-            , end = start + lineWidth
-            }
-        )
-        m
+    pure renderList
 
 freshColor :: forall r. Run ( state :: STATE RenderState | r ) String
 freshColor = do
   state <- get
   case LazyList.uncons state.colors of
     Just { head, tail } -> do
-      put { colors: tail }
+      put state { colors = tail }
       pure head
     -- TODO: don't do stupid stuff like this
     Nothing -> pure "black"
+
+getStart :: forall r. Int -> Run ( reader :: READER RenderContext | r ) Int
+getStart x = ado
+  starts <- ask <#> _.starts
+  in case List.index starts x of
+    Just r -> r
+    Nothing -> 0
 
 -- | Given a point on a call diagonal, calculate the position on the other side
 callDiagonalOpposite :: Boolean -> Vector.Vec2 -> Vector.Vec2
@@ -399,15 +315,7 @@ getY ::
   (Label "position" => Int) ->
   (Label "height" => Int) ->
   List.List YMeasures -> Int
-getY index position height slices =
-  trace
-    { units
-    , left
-    , index
-    , position
-    , slices
-    , height
-    } \_ -> unitHeight * units + unitHeight / 2 * (left - height)
+getY index position height slices = unitHeight * units + unitHeight / 2 * (left - height)
   where
   (Tuple units left) =
     foldrWithIndex
@@ -482,14 +390,15 @@ runRenderM = evalState state >>> runReader ctx >>> extract
   ctx :: RenderContext
   ctx =
     { doNotRender: Set.empty
-    , start: 0
-    , end: 0
     , slices: List.singleton mempty
     , colors: List.Nil
     , yOffsets: List.Nil
+    , starts: List.Nil
+    , xStart: 0
     }
 
   state :: RenderState
   state =
     { colors: colors
+    , x: 0
     }
