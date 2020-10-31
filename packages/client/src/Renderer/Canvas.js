@@ -8,10 +8,11 @@ exports.onResize = (e) => () => {
 }
 
 exports.fitIntoBounds = (bounds) => (ctx) => () => {
-  ctx.translate(bounds.x, bounds.y)
+  // ctx.translate(-bounds.x, -bounds.y)
 
-  const xScale = bounds.width / ctx.canvas.width
-  const yScale = bounds.height / ctx.canvas.height
+  const diff = 50
+  const xScale = (bounds.width + diff) / ctx.canvas.width
+  const yScale = (bounds.height + diff) / ctx.canvas.height
   const max = Math.max(xScale, yScale)
 
   const scale = 1 / max
@@ -19,11 +20,11 @@ exports.fitIntoBounds = (bounds) => (ctx) => () => {
   ctx.scale(scale, scale)
 
   if (xScale > yScale) {
-    const extra = ctx.canvas.height * max - bounds.height
+    const extra = ctx.canvas.height * max - bounds.height - diff
 
-    ctx.translate(0, extra / 2)
+    // ctx.translate(0, extra / 2)
   } else {
-    const extra = ctx.canvas.width * max - bounds.width
+    const extra = ctx.canvas.width * max - bounds.width - diff
 
     ctx.translate(extra / 2, 0)
   }

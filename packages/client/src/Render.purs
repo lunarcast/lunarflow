@@ -61,7 +61,6 @@ render (Tuple layout rootMeasures) =
     |> cata algebra
     |> local (_ { slices = [ rootMeasures ] })
     |> map ((\{ shapes, overlays } -> shapes <> overlays) >>> Shape.fromFoldable)
-    |> map (Shape.Translate (vec2 5 10))
   where
   algebra :: Algebra YLayoutF (RenderM RenderList)
   algebra (Lambda data'@{ args, heights, position } body) = do

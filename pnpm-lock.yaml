@@ -2,6 +2,7 @@ dependencies:
   '@thi.ng/geom': 1.13.0
   '@thi.ng/hiccup-canvas': 1.1.10
   '@thi.ng/vectors': 4.7.0
+  preact: 10.5.5
 devDependencies:
   '@semantic-release/changelog': 5.0.1_semantic-release@17.1.2
   '@semantic-release/git': 9.0.0_semantic-release@17.1.2
@@ -4941,6 +4942,10 @@ packages:
       node: ^10 || ^12 || >=14
     resolution:
       integrity: sha512-9DGLSsjooH3kSNjTZUOt2eIj2ZTW0VI2PZ/3My+8TC7KIbH2OKwUlISfDsf63EP4aiRUt3XkEWMWvyJHvJelEg==
+  /preact/10.5.5:
+    dev: false
+    resolution:
+      integrity: sha512-5ONLNH1SXMzzbQoExZX4TELemNt+TEDb622xXFNfZngjjM9qtrzseJt+EfiUu4TZ6EJ95X5sE1ES4yqHFSIdhg==
   /prepend-http/2.0.0:
     dev: true
     engines:
@@ -6310,4 +6315,5 @@ specifiers:
   postcss-import: ^12.0.1
   postcss-preset-env: ^6.7.0
   postcss-simple-vars: ^6.0.1
+  preact: ^10.5.5
   semantic-release: ^17.1.2

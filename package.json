@@ -7,7 +7,7 @@
     "dev": "pnpm run prepare-build && concurrently -k -c cyan nodemon \"nodemon --config nodemon.css.json\" \"pnpm run watch\"",
     "build": "pnpm run prepare-build && pnpm run bundle:purescript && pnpm run dce && pnpm run bundle:js && cross-env NODE_ENV='production' pnpm run build:css",
     "postbuild": "cp dist/index.html dist/404.html",
-    "build:js": "esbuild --outdir=dist public/entry.js --bundle",
+    "build:js": "esbuild --outdir=dist public/entry.js --bundle --loader:.js=jsx",
     "bundle:js": "pnpm run build:js -- --minify --define:production=true",
     "build:css": "postcss public/styles/index.pcss -o dist/index.css",
     "bundle:purescript": "spago build --purs-args '--codegen corefn'",
@@ -37,7 +37,8 @@
   "dependencies": {
     "@thi.ng/geom": "^1.13.0",
     "@thi.ng/hiccup-canvas": "^1.1.10",
-    "@thi.ng/vectors": "^4.7.0"
+    "@thi.ng/vectors": "^4.7.0",
+    "preact": "^10.5.5"
   },
   "sideEffects": false
 }

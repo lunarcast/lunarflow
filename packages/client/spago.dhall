@@ -23,6 +23,8 @@
   , "matryoshka"
   , "undefined-is-not-a-problem"
   , "refs"
+  , "concur-core"
+  , "concur-react"
   , "lunarflow-utils"
   , "lunarflow-core"
   , "lunarflow-geometry"
