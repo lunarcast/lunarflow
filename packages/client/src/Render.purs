@@ -101,23 +101,20 @@ render (Tuple layout rootMeasures) =
 
       width = max (bodyRenderList.maxX - xStart) lineWidth
 
-      lambdaShape :: Array Shape.Shape
-      lambdaShape = do
-        guard $ not isRoot
-        [ Shape.rect
-            -- stroke: bodyRenderList.color --, weight: 0.0 
-            { fill: "rgb(196,196,196, 0.12)"
-            }
-            { y: updatedYOffset
-            , height
-            , x: xStart
-            , width
-            }
-        ]
+      lambdaShape :: Shape.Shape
+      lambdaShape =
+        Shape.rect
+          { fill: if isRoot then "transparent" else "rgb(196,196,196, 0.12)"
+          }
+          { y: updatedYOffset
+          , height
+          , x: xStart
+          , width
+          }
 
       renderList :: RenderList
       renderList =
-        { shapes: lambdaShape <> bodyRenderList.shapes
+        { shapes: [ lambdaShape ] <> bodyRenderList.shapes
         , overlays: bodyRenderList.overlays
         , color: bodyRenderList.color
         , lineY

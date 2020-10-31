@@ -26,9 +26,5 @@ exports.fitIntoBounds = (bounds) => (ctx) => () => {
     console.log(extra)
 
     ctx.translate(0, extra / 2)
-  } else {
-    const extra = ctx.canvas.width * max - bounds.width - diff
-
-    ctx.translate(extra / 2, 0)
   }
 }
