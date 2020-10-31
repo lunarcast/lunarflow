@@ -58,6 +58,7 @@ type LayoutLambdaData
         , name :: String
         }
     , scope :: ScopeId
+    , isRoot :: Boolean
     )
 
 -- | The base functor for scoped layouts.
@@ -155,6 +156,7 @@ addIndices =
       position <- nearFunction $ ask <#> _.near >>= placeExpression except constraint
       pure $ call { position } function argument
     Lambda vars (Tuple groupedBody layoutBody) -> do
+      currentScope <- ask <#> _.currentScope
       scope <- newScope
       initialState <- get
       let
@@ -178,7 +180,7 @@ addIndices =
       -- This holds all the variables referenced inside the body of the lambda
       inBody <- Set.fromFoldable <$> for referenced getVarPosition
       position <- ask <#> _.near >>= placeExpression inBody Everywhere
-      pure $ lambda { position, args, scope } body
+      pure $ lambda { position, args, scope, isRoot: currentScope == Root } body
       where
       newList = List.range 0 (varCount - 1) <#> \index -> varCount - index - 1
 
@@ -386,11 +388,11 @@ unscopeLayout layout = layout >>= cata algebra
       argument' <- argument
       position' <- unscopePosition position
       in call position' function' argument'
-    Lambda { position, scope, args } body -> ado
+    Lambda { position, scope, args, isRoot } body -> ado
       position' <- unscopePosition position
       body' <- body
       args' <- for args (_.position >>> unscopePosition)
-      in lambda { position: position', args: args', isRoot: scope == Root } body'
+      in lambda { position: position', args: args', isRoot } body'
 
 -- | Typeclass instances
 derive instance eqScopeId :: Eq ScopeId
