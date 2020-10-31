@@ -1,3 +1,11 @@
+## [1.2.2](https://github.com/lunarcast/lunarflow/compare/v1.2.1...v1.2.2) (2020-10-31)
+
+
+### Bug Fixes
+
+* **client:** removed unnecessary background for the root lambda ([9b45b8e](https://github.com/lunarcast/lunarflow/commit/9b45b8e5473000d4ad641b1d484e980d44f0d68e))
+* **client:** the rendering should be centered now ([dfacec6](https://github.com/lunarcast/lunarflow/commit/dfacec6f1f30d2e22c42cb79674241fb0a2b2562))
+
 ## [1.2.1](https://github.com/lunarcast/lunarflow/compare/v1.2.0...v1.2.1) (2020-10-31)
 
 
