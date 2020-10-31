@@ -53,15 +53,14 @@ geometryBenchmarks =
         )
     $ profileApplication "Grouping expression" groupExpression
     $ profileApplication "Adding de-brujin indices" withDebrujinIndices
-    -- $ profileApplication "Parsing" unsafeParseLambdaCalculus """\n s z. n (\g h. h (g s)) (\u. z) (\u. u)"""
-    
-    $ call unit (call unit plus' (n 3))
-        ( call unit (call unit mult (n 7))
-            ( call unit (call unit exp (n 2))
-                (zero')
-            )
-        )
+    $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f a b. f b a"""
 
+-- $ call unit (call unit plus' (n 3))
+--     ( call unit (call unit mult (n 7))
+--         ( call unit (call unit exp (n 2))
+--             (zero')
+--         )
+--     )
 data Error
   = ParsingError ParseError
   | LayoutCreationError LayoutError
