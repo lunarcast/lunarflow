@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/lunarcast/lunarflow/compare/v1.2.2...v1.2.3) (2020-10-31)
+
+
+### Bug Fixes
+
+* **client:** the y alignment should be less trash now ([0e80598](https://github.com/lunarcast/lunarflow/commit/0e80598522f49e4af333c97409cbf166589d63c1))
+
 ## [1.2.2](https://github.com/lunarcast/lunarflow/compare/v1.2.1...v1.2.2) (2020-10-31)
 
 
