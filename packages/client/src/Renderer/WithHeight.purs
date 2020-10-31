@@ -21,7 +21,12 @@ import Matryoshka (Algebra, cata, project)
 
 -- | The base functor for YLayouts.
 type YLayoutF
-  = AstF { position :: Int, index :: Int } Int { position :: Int, args :: List.List Int, heights :: YMeasures }
+  = AstF { position :: Int, index :: Int } Int
+      { position :: Int
+      , args :: List.List Int
+      , isRoot :: Boolean
+      , heights :: YMeasures
+      }
 
 -- | YLayouts are layouts which keep track of the maximum height of each line
 type YLayout
@@ -41,7 +46,7 @@ withHeights = cata algebra
   where
   algebra :: Algebra LayoutF (Tuple YLayout YMeasures)
   algebra = case _ of
-    Lambda { position, args } (Tuple body rawHeights) -> Tuple yLambda measures
+    Lambda { position, args, isRoot } (Tuple body rawHeights) -> Tuple yLambda measures
       where
       heights =
         mergeArrays rawHeights
@@ -49,13 +54,14 @@ withHeights = cata algebra
           $ args
           <#> \x -> createArray x 1 []
 
-      measures = createArray position (sum heights + 1) []
+      measures = createArray position (sum heights + if isRoot then 1 else 1) []
 
       yLambda =
         lambda
           { position
           , args
           , heights
+          , isRoot
           }
           body
     Var { index, position } -> Tuple yVar yMap

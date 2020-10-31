@@ -34,6 +34,9 @@ colors =
         , "#abaaaf"
         ]
 
+callCircleColor :: String
+callCircleColor = "#4b427a"
+
 callAngle :: Radians
 callAngle = pi / 3.0
 

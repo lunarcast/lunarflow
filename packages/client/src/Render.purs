@@ -19,7 +19,7 @@ import Lunarflow.Ast (AstF(..))
 import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
 import Lunarflow.Pipe ((|>))
-import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, colors, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
+import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, callCircleColor, colors, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
 import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMeasures)
 import Lunarflow.Vector as Vector
 import Matryoshka (Algebra, cata)
@@ -63,7 +63,7 @@ render (Tuple layout rootMeasures) =
     |> map ((\{ shapes, overlays } -> shapes <> overlays) >>> Shape.fromFoldable)
   where
   algebra :: Algebra YLayoutF (RenderM RenderList)
-  algebra (Lambda data'@{ args, heights, position } body) = do
+  algebra (Lambda data'@{ args, heights, position, isRoot } body) = do
     xStart <- ask <#> _.xStart
     slices <- ask <#> _.slices
     yOffset <- getYOffset 0
@@ -101,22 +101,24 @@ render (Tuple layout rootMeasures) =
 
       width = max (bodyRenderList.maxX - xStart) lineWidth
 
-      lambdaShape :: Shape.Shape
-      lambdaShape =
-        Shape.rect
-          { stroke: bodyRenderList.color
-          , weight: 5.0
-          }
-          { y: updatedYOffset
-          , height
-          , x: xStart
-          , width
-          }
+      lambdaShape :: Array Shape.Shape
+      lambdaShape = do
+        guard $ not isRoot
+        [ Shape.rect
+            -- stroke: bodyRenderList.color --, weight: 0.0 
+            { fill: "rgb(196,196,196, 0.12)"
+            }
+            { y: updatedYOffset
+            , height
+            , x: xStart
+            , width
+            }
+        ]
 
       renderList :: RenderList
       renderList =
-        { shapes: bodyRenderList.shapes
-        , overlays: [ lambdaShape ] <> bodyRenderList.overlays
+        { shapes: lambdaShape <> bodyRenderList.shapes
+        , overlays: bodyRenderList.overlays
         , color: bodyRenderList.color
         , lineY
         , maxX: xStart + width
@@ -214,7 +216,7 @@ render (Tuple layout rootMeasures) =
 
       callCircle :: Shape.Shape
       callCircle =
-        Shape.circle { fill: "green" }
+        Shape.circle { fill: callCircleColor }
           { x: function.maxX + continuationWidth
           , y: function.lineY + lineHeight / 2
           , radius: floor $ toNumber lineHeight * 0.7

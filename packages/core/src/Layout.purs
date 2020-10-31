@@ -71,7 +71,11 @@ type ScopedLayout
 
 -- | The base functor for layouts.
 type LayoutF
-  = AstF { position :: Int, index :: Int } Int { position :: Int, args :: List.List Int }
+  = AstF { position :: Int, index :: Int } Int
+      { position :: Int
+      , args :: List.List Int
+      , isRoot :: Boolean
+      }
 
 -- | Layouts are expressions which have vertical indices for every line.
 type Layout
@@ -386,7 +390,7 @@ unscopeLayout layout = layout >>= cata algebra
       position' <- unscopePosition position
       body' <- body
       args' <- for args (_.position >>> unscopePosition)
-      in lambda { position: position', args: args' } body'
+      in lambda { position: position', args: args', isRoot: scope == Root } body'
 
 -- | Typeclass instances
 derive instance eqScopeId :: Eq ScopeId
