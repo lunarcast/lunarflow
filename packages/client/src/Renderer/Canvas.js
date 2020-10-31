@@ -8,7 +8,7 @@ exports.onResize = (e) => () => {
 }
 
 exports.fitIntoBounds = (bounds) => (ctx) => () => {
-  ctx.translate(-bounds.x, -bounds.y * 2)
+  ctx.translate(-bounds.x, -bounds.y)
   console.log(bounds)
 
   const diff = 0
