@@ -1,3 +1,11 @@
+## [1.2.1](https://github.com/lunarcast/lunarflow/compare/v1.2.0...v1.2.1) (2020-10-31)
+
+
+### Bug Fixes
+
+* **client:** added missing imports, the project should actually compile now ([5a14a4d](https://github.com/lunarcast/lunarflow/commit/5a14a4db7204db9b1798c36aa7ed2089637bbb64))
+* **client:** the default expression is consistent with the initial input text ([e3f6308](https://github.com/lunarcast/lunarflow/commit/e3f6308c91c0e2adfb1ef846470aa7eeed1fadf7))
+
 # [1.2.0](https://github.com/lunarcast/lunarflow/compare/v1.1.0...v1.2.0) (2020-10-31)
 
 
