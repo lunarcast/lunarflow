@@ -24,7 +24,8 @@ jobs:
           key: ${{ runner.os }}-spago-${{ hashFiles('**/*.dhall') }}
           path: |
             .spago
-            output
+            output/[!Lunarflow]*
+            output/[!Main]
       - uses: actions/setup-node@v1
         with:
           node-version: "12.x"
