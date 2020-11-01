@@ -54,7 +54,7 @@ withHeights = cata algebra
           $ args
           <#> \x -> createArray x 1 []
 
-      measures = createArray position (sum heights) []
+      measures = createArray position (sum heights + 1) []
 
       yLambda =
         lambda

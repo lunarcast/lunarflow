@@ -15,6 +15,7 @@ module Lunarflow.Layout
   , addIndices
   , unscopeLayout
   , runLayoutM
+  , markRoot
   ) where
 
 import Prelude
@@ -119,6 +120,14 @@ type LayoutM
       , except :: EXCEPT LayoutError
       )
 
+-- | If the expression starts off with a lambda, mark it up as the root lambda.
+-- | We do this to avoid adding an unnecessary box around the root lambda later in the pipeline.
+markRoot :: LayoutM ScopedLayout -> LayoutM ScopedLayout
+markRoot =
+  map \x -> case project x of
+    Lambda data' body -> lambda (data' { isRoot = true }) body
+    _ -> x
+
 -- | Generate a layout from an ast.
 addIndices :: GroupedExpression -> LayoutM ScopedLayout
 addIndices =
@@ -180,7 +189,7 @@ addIndices =
       -- This holds all the variables referenced inside the body of the lambda
       inBody <- Set.fromFoldable <$> for referenced getVarPosition
       position <- ask <#> _.near >>= placeExpression inBody Everywhere
-      pure $ lambda { position, args, scope, isRoot: currentScope == Root } body
+      pure $ lambda { position, args, scope, isRoot: false } body
       where
       newList = List.range 0 (varCount - 1) <#> \index -> varCount - index - 1
 

@@ -9,7 +9,7 @@ import Concur.React.Widgets (textInputWithButton)
 import Control.MultiAlternative (orr)
 import Control.Plus (empty)
 import Data.Bifunctor (lmap)
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Maybe (Maybe(..))
@@ -22,53 +22,34 @@ import Graphics.Canvas (CanvasElement, Context2D, getCanvasElementById, getConte
 import Lunarflow.Ast (withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
 import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
-import Lunarflow.Layout (LayoutError, addIndices, runLayoutM, unscopeLayout)
-import Lunarflow.Parser (parseLambdaCalculus, unsafeParseLambdaCalculus)
+import Lunarflow.Layout (LayoutError, addIndices, markRoot, runLayoutM, unscopeLayout)
+import Lunarflow.Parser (parseLambdaCalculus)
 import Lunarflow.Pipe ((|>))
-import Lunarflow.Profile (profileApplication)
 import Lunarflow.Render (render, runRenderM)
 import Lunarflow.Renderer.Canvas (fillScreen, fitIntoBounds, onResize)
 import Lunarflow.Renderer.WithHeight (withHeights)
 import Partial.Unsafe (unsafeCrashWith)
-import Prelude (class Show, Unit, bind, discard, map, pure, show, unit, ($), (<<<))
+import Prelude (class Show, Unit, bind, discard, identity, pure, show, unit, ($), (>>>))
 import Text.Parsing.Parser (ParseError)
 
-geometryBenchmarks :: Effect Geometry
-geometryBenchmarks =
-  profileApplication "Converting shape to geometry" fromShape
-    $ profileApplication "Rendering layout" (runRenderM <<< render)
-    -- $ map debugSpy
-    
-    $ profileApplication "Adding height data" withHeights
-    $ map
-        ( case _ of
-            Left err -> unsafeCrashWith $ show err
-            Right a -> a
-        )
-    $ profileApplication "Creating layout"
-        ( runLayoutM
-            <<< unscopeLayout
-            <<< addIndices
-        )
-    $ profileApplication "Grouping expression" groupExpression
-    $ profileApplication "Adding de-brujin indices" withDebrujinIndices
-    $ profileApplication "Parsing" unsafeParseLambdaCalculus """\f a b. f b a"""
+-- | The state which the concur widget keeps track of.
+type State
+  = { error :: Maybe String
+    , value :: String
+    }
 
--- $ call unit (call unit plus' (n 3))
---     ( call unit (call unit mult (n 7))
---         ( call unit (call unit exp (n 2))
---             (zero')
---         )
---     )
+-- | Initial config we pass to the concur widget.
+type Input
+  = { ref :: Ref.Ref Geometry
+    , render :: Effect Unit
+    }
+
+-- | Possible errors which can occur while generating the geometry.
 data Error
   = ParsingError ParseError
   | LayoutCreationError LayoutError
 
-derive instance genericError :: Generic Error _
-
-instance showError :: Show Error where
-  show = genericShow
-
+-- | This takes a lambda calulus expression and tries to build a geometry out of it.
 mkGeometry :: String -> Either Error Geometry
 mkGeometry text = do
   rawExpression <- lmap ParsingError $ parseLambdaCalculus text
@@ -77,6 +58,7 @@ mkGeometry text = do
       |> withDebrujinIndices
       |> groupExpression
       |> addIndices
+      |> markRoot
       |> unscopeLayout
       |> runLayoutM
       |> lmap LayoutCreationError
@@ -87,6 +69,7 @@ mkGeometry text = do
     |> fromShape
     |> pure
 
+-- | This function renders the current geometry to the canvas
 app :: Ref.Ref Geometry -> CanvasElement -> Context2D -> Effect Unit
 app ref canvas ctx = do
   fillScreen canvas
@@ -98,16 +81,7 @@ app ref canvas ctx = do
   renderGeometry geometry ctx
   restore ctx
 
-type State
-  = { error :: Maybe String
-    , value :: String
-    }
-
-type Input
-  = { ref :: Ref.Ref Geometry
-    , render :: Effect Unit
-    }
-
+-- | This is the concur widget for the button thingy in the corner.
 textBox :: forall a. Input -> State -> Widget HTML a
 textBox input { value, error } = do
   text <-
@@ -127,6 +101,10 @@ textBox input { value, error } = do
       pure { error: Nothing, value: text }
   textBox input state
 
+-- | The expression the website loads by default.
+initialExpression :: String
+initialExpression = """\f a b. f b a"""
+
 main :: Effect Unit
 main = do
   maybeCanvas <- getCanvasElementById "canvas"
@@ -134,7 +112,10 @@ main = do
     Nothing -> Console.log "No canvas found"
     Just canvas -> do
       ctx <- getContext2D canvas
-      geometry <- geometryBenchmarks
+      let
+        geometry =
+          mkGeometry initialExpression
+            |> either (show >>> unsafeCrashWith) identity
       ref <- Ref.new geometry
       let
         runApp = app ref canvas ctx
@@ -142,6 +123,12 @@ main = do
       runApp
       runWidgetInDom "root"
         $ textBox { ref, render: runApp }
-            { value: """\f a b. f b a"""
+            { value: initialExpression
             , error: Nothing
             }
+
+---------- Tyeclass instances
+derive instance genericError :: Generic Error _
+
+instance showError :: Show Error where
+  show = genericShow
