@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/lunarcast/lunarflow/compare/v1.2.3...v1.2.4) (2020-11-01)
+
+
+### Bug Fixes
+
+* **client:** draw boxes for root lambdas ([1c74dc7](https://github.com/lunarcast/lunarflow/commit/1c74dc76b138a574a1ea82ab5dcd6e097ee64156))
+
 ## [1.2.3](https://github.com/lunarcast/lunarflow/compare/v1.2.2...v1.2.3) (2020-10-31)
 
 
