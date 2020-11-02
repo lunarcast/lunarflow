@@ -1,3 +1,13 @@
+# [1.3.0](https://github.com/lunarcast/lunarflow/compare/v1.2.4...v1.3.0) (2020-11-02)
+
+
+### Features
+
+* **client:** eta reduce button ([9a603aa](https://github.com/lunarcast/lunarflow/commit/9a603aac30dcfb9ba294f5a7def4d02d92307828))
+* **core:** eta reduction ([6dcecaf](https://github.com/lunarcast/lunarflow/commit/6dcecafe40e927e6ac22fc6cf2f54b65a1fc1178))
+* **core:** scoping layouts ([ae86622](https://github.com/lunarcast/lunarflow/commit/ae86622160f1f166617b43ab7e2e6820c2a14558))
+* **utils:** Endomorphism type and helper for printing a value with a Debug instance ([89e4485](https://github.com/lunarcast/lunarflow/commit/89e4485121e62723c405ee544870f837a63dc2c7))
+
 ## [1.2.4](https://github.com/lunarcast/lunarflow/compare/v1.2.3...v1.2.4) (2020-11-01)
 
 
