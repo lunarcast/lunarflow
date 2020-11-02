@@ -18,7 +18,7 @@ import Data.Vec (vec2, (!!))
 import Lunarflow.Ast (AstF(..))
 import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
-import Lunarflow.Pipe ((|>))
+import Lunarflow.Function ((|>))
 import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, callCircleColor, colors, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
 import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMeasures)
 import Lunarflow.Vector as Vector
