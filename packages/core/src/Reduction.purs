@@ -42,10 +42,10 @@ introduce position { from, into } layout = do
   state <- get
   case Map.lookup from state.indexMap, Map.lookup into state.indexMap of
     Just listFrom, Just listInto -> do
-      past <- unscopePosition position
+      past <- unscopePosition position <#> (_ - 1)
       shiftLines into { amount: height, past }
       let
-        moved = listFrom <#> (\a -> a + past + 1)
+        moved = listFrom <#> (\a -> a + past + 0)
       put
         state
           { indexMap =

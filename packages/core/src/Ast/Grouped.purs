@@ -26,7 +26,7 @@ groupExpression = cata algebra
     Call data' a b -> call data' a b
     Var data' -> var { index: data' }
     Lambda name body -> case project body of
-      Lambda { args } body' -> lambda { args: args `List.snoc` name } body'
+      Lambda { args } body' -> lambda { args: name `List.Cons` args } body'
       _ -> lambda { args: List.singleton name } body
 
 -- | Find all referenced vars inside an expression.

@@ -223,7 +223,7 @@ findLocation { constraint, positionIndex, positions, except, scope } = ado
         |> List.filter (fst >>> allowed)
         |> map (map distanceToPosition)
         |> minimumBy (on compare snd)
-        |> map snd
+        |> map fst
       where
       distanceToPosition x = abs (position - x)
   --
@@ -252,7 +252,7 @@ placeExpression except constraint positionIndex = do
               Just index
       }
   case result of
-    At index -> createPosition index ctx.currentScope
+    At index -> pure $ Position index ctx.currentScope
     NextTo y -> do
       shiftLines ctx.currentScope { past: y, amount: 1 }
       createPosition (y + 1) ctx.currentScope
