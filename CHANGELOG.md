@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/lunarcast/lunarflow/compare/v1.3.0...v1.3.1) (2020-11-02)
+
+
+### Bug Fixes
+
+* **core:** fixed the overlapping lambdas bug ([8ffafd4](https://github.com/lunarcast/lunarflow/commit/8ffafd48e8478b03e4a707c837ede6af9d44a7fa))
+
 # [1.3.0](https://github.com/lunarcast/lunarflow/compare/v1.2.4...v1.3.0) (2020-11-02)
 
 
