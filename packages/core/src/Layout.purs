@@ -1,12 +1,10 @@
 module Lunarflow.Layout
-  ( WithPosition
-  , ScopedLayoutF
+  ( ScopedLayoutF
   , ScopedLayout
   , LayoutF
   , Layout
   , LayoutContext
   , LayoutState
-  , LayoutLambdaData
   , LayoutError
   , LayoutM
   , Position(..)
@@ -14,6 +12,7 @@ module Lunarflow.Layout
   , IndexMap
   , addIndices
   , unscopeLayout
+  , scopeLayout
   , runLayoutM
   , markRoot
   ) where
@@ -37,39 +36,26 @@ import Lunarflow.Ast.Grouped (GroupedExpression, references)
 import Lunarflow.List (indexed)
 import Lunarflow.Mu (Mu)
 import Lunarflow.Pipe ((|>))
-import Matryoshka (Algebra, cata, para, project)
+import Matryoshka (cata, para, project)
 import Run (Run, extract)
 import Run.Except (EXCEPT, note, runExcept, throw)
 import Run.Reader (READER, ask, local, runReader)
 import Run.State (STATE, evalState, get, modify, put)
 
+---------- Types
 -- | Mapping from positions to vertical indices.
 type IndexMap
   = Map.Map ScopeId (List.List Int)
 
--- | Extensible record for asts which horizontally index all the lines.
-type WithPosition r
-  = ( position :: Position | r )
-
--- | Data carried around by lambdas in layouts.
-type LayoutLambdaData
-  = ( args ::
-      List.List
-        { position :: Position
-        , name :: String
-        }
-    , scope :: ScopeId
-    , isRoot :: Boolean
-    )
-
 -- | The base functor for scoped layouts.
 type ScopedLayoutF
-  = AstF { | WithPosition ( index :: Int ) } { | WithPosition () } { | WithPosition LayoutLambdaData }
-
--- | Layouts are expressions which have vertical indices for every line.
--- | This is the scoped variant, which keeps track of what scope everything is from.
-type ScopedLayout
-  = Mu ScopedLayoutF
+  = AstF { index :: Int, position :: Position } { position :: Position }
+      { args ::
+        List.List Position
+      , scope :: ScopeId
+      , isRoot :: Boolean
+      , position :: Position
+      }
 
 -- | The base functor for layouts.
 type LayoutF
@@ -82,6 +68,11 @@ type LayoutF
 -- | Layouts are expressions which have vertical indices for every line.
 type Layout
   = Mu LayoutF
+
+-- | Layouts are expressions which have vertical indices for every line.
+-- | This is the scoped variant, which keeps track of what scope everything is from.
+type ScopedLayout
+  = Mu ScopedLayoutF
 
 -- | Ids used to connect lambdas together in visual chunks.
 data ScopeId
@@ -120,14 +111,18 @@ type LayoutM
       , except :: EXCEPT LayoutError
       )
 
--- | If the expression starts off with a lambda, mark it up as the root lambda.
--- | We do this to avoid adding an unnecessary box around the root lambda later in the pipeline.
-markRoot :: LayoutM ScopedLayout -> LayoutM ScopedLayout
-markRoot =
-  map \x -> case project x of
-    Lambda data' body -> lambda (data' { isRoot = true }) body
-    _ -> x
+-- | Different ways we can constrain where expressions can be placed.
+data LocationConstraint
+  = Everywhere
+  | Above
+  | Below
 
+-- | Actions we can take in order to place an expression.
+data LocationSearchResult
+  = At Int
+  | NextTo Int
+
+---------- Layout generation
 -- | Generate a layout from an ast.
 addIndices :: GroupedExpression -> LayoutM ScopedLayout
 addIndices =
@@ -148,7 +143,7 @@ addIndices =
       -- by stuff while drawing the function.
       -- So we basically inform the call not to touch those spaces.
       function <- protect inArgument layoutFunction
-      scope <- ask <#> _.currentScope
+      scope <- currentScope
       let
         functionPosition@(Position functionIndex functionScope) = getPosition function
 
@@ -165,18 +160,15 @@ addIndices =
       position <- nearFunction $ ask <#> _.near >>= placeExpression except constraint
       pure $ call { position } function argument
     Lambda vars (Tuple groupedBody layoutBody) -> do
-      currentScope <- ask <#> _.currentScope
       scope <- newScope
       initialState <- get
       let
-        args =
-          flip List.mapWithIndex vars \index name ->
-            { name, position: Position index scope }
+        args = flip List.mapWithIndex vars \index name -> Position index scope
       put initialState { indexMap = Map.insert scope newList initialState.indexMap }
       body <-
         flip local layoutBody \ctx ->
           ctx
-            { positions = (_.position <$> args) <> ctx.positions
+            { positions = args <> ctx.positions
             , near = 0
             , currentScope = scope
             }
@@ -194,66 +186,6 @@ addIndices =
       newList = List.range 0 (varCount - 1) <#> \index -> varCount - index - 1
 
       varCount = List.length vars
-
--- | Run a computation in a context where 
--- an arbitrary set of positions is protected.
-protect :: Set.Set Position -> LayoutM ~> LayoutM
-protect inputs = local (\a -> a { protected = a.protected <> inputs })
-
--- | Run a computation in a context "attracted" to an arbitrary position.
-attractTo :: Int -> LayoutM ~> LayoutM
-attractTo near = local (_ { near = near })
-
--- | Get the position an expression already has.
-getPosition :: ScopedLayout -> Position
-getPosition layout = case project layout of
-  Var { position } -> position
-  Call { position } _ _ -> position
-  Lambda { position } _ -> position
-
--- | Create a position which lives in the current scope.
-mkPosition :: Int -> LayoutM Position
-mkPosition index = do
-  scope <- ask <#> _.currentScope
-  pure $ Position index scope
-
--- | Create a new scope with an unique id.
-newScope :: LayoutM ScopeId
-newScope = do
-  state <- get
-  let
-    scope = 1 + state.lastScope
-  put state { lastScope = scope }
-  pure $ ScopeId scope
-
--- TODO: better error messages.
--- | Get the position a var has in the current scope.
-getVarPosition :: Int -> LayoutM Position
-getVarPosition index = do
-  positions <- ask <#> _.positions
-  case positions `List.index` index of
-    Just position -> pure position
-    Nothing -> throw $ VarNotInScope index
-
--- | Get the list of indices describing the scope we are in.
-currentIndexList :: LayoutM (List.List Int)
-currentIndexList = do
-  state <- get
-  ctx <- ask
-  case Map.lookup ctx.currentScope state.indexMap of
-    Just list -> pure list
-    Nothing -> throw $ MissingIndexMap ctx.currentScope
-
--- | Different ways we can constrain where expressions can be placed.
-data LocationConstraint
-  = Everywhere
-  | Above
-  | Below
-
--- | Actions we can take in order to place an expression.
-data LocationSearchResult
-  = At Int
-  | NextTo Int
 
 -- | Search for the optimal location to put something at.
 findLocation ::
@@ -341,16 +273,127 @@ placeExpression except constraint positionIndex = do
         | x <= position = x
         | otherwise = x + 1
 
--- | Get the absolute position described by a relative one.
-unscopePosition :: Position -> LayoutM Int
-unscopePosition (Position index scope) = do
+---------- Converstion functions
+-- | Transform a scoped layout into an unscoped one.
+unscopeLayout :: ScopedLayout -> LayoutM Layout
+unscopeLayout =
+  cata case _ of
+    Var { index, position } -> unscopePosition position <#> \position' -> var { position: position', index }
+    Call { position } function argument -> ado
+      function' <- function
+      argument' <- argument
+      position' <- unscopePosition position
+      in call position' function' argument'
+    Lambda { position, scope, args, isRoot } body -> ado
+      position' <- unscopePosition position
+      body' <- body
+      args' <- for args unscopePosition
+      in lambda { position: position', args: args', isRoot } body'
+
+-- | Transform an unscoped layout into a scoped one
+scopeLayout :: Layout -> LayoutM ScopedLayout
+scopeLayout =
+  cata case _ of
+    Var { position, index } -> do
+      position' <- getVarPosition index
+      pure $ var { position: position', index }
+    Call position function argument -> ado
+      function' <- function
+      argument' <- argument
+      position' <- currentScope >>= scopePosition position
+      in call { position: position' } function' argument'
+    Lambda { position, args, isRoot } body -> do
+      scope <- newScope
+      modify \s -> s { indexMap = Map.insert scope List.Nil s.indexMap }
+      position' <- currentScope >>= scopePosition position
+      args' <- for args $ flip scopePosition scope
+      body' <-
+        flip local body \ctx ->
+          ctx
+            { positions = args' <> ctx.positions
+            , currentScope = scope
+            }
+      pure $ lambda { isRoot, scope, position: position', args: args' } body'
+  where
+  scopePosition :: Int -> ScopeId -> LayoutM Position
+  scopePosition position scope = do
+    state <- get
+    -- TODO: consider a helper for updating the indexMap
+    put
+      state
+        { indexMap =
+          Map.update
+            ( flip List.snoc position
+                >>> Just
+            )
+            scope
+            state.indexMap
+        }
+    case Map.lookup scope state.indexMap of
+      Just list -> pure $ Position (List.length list) scope
+      Nothing -> throw $ MissingIndexMap scope
+
+---------- Helpers
+-- | If the expression starts off with a lambda, mark it up as the root lambda.
+-- | We do this to avoid adding an unnecessary box around the root lambda later in the pipeline.
+markRoot :: LayoutM ScopedLayout -> LayoutM ScopedLayout
+markRoot =
+  map \x -> case project x of
+    Lambda data' body -> lambda (data' { isRoot = true }) body
+    _ -> x
+
+-- | Run a computation in a context where 
+-- an arbitrary set of positions is protected.
+protect :: Set.Set Position -> LayoutM ~> LayoutM
+protect inputs = local (\a -> a { protected = a.protected <> inputs })
+
+-- | Get the scope we are currently in.
+currentScope :: LayoutM ScopeId
+currentScope = ask <#> _.currentScope
+
+-- | Run a computation in a context "attracted" to an arbitrary position.
+attractTo :: Int -> LayoutM ~> LayoutM
+attractTo near = local (_ { near = near })
+
+-- | Get the position an expression already has.
+getPosition :: ScopedLayout -> Position
+getPosition layout = case project layout of
+  Var { position } -> position
+  Call { position } _ _ -> position
+  Lambda { position } _ -> position
+
+-- | Create a position which lives in the current scope.
+mkPosition :: Int -> LayoutM Position
+mkPosition index = do
+  scope <- ask <#> _.currentScope
+  pure $ Position index scope
+
+-- | Create a new scope with an unique id.
+newScope :: LayoutM ScopeId
+newScope = do
   state <- get
-  -- NOTE: we could use `note`, but I think this is cleaner, albeit more verbose
-  case Map.lookup scope state.indexMap of
-    Just list -> case List.index list index of
-      Just position -> pure position
-      Nothing -> throw $ MissingPosition list scope index
-    Nothing -> throw $ MissingIndexMap scope
+  let
+    scope = 1 + state.lastScope
+  put state { lastScope = scope }
+  pure $ ScopeId scope
+
+-- TODO: better error messages.
+-- | Get the position a var has in the current scope.
+getVarPosition :: Int -> LayoutM Position
+getVarPosition index = do
+  positions <- ask <#> _.positions
+  case positions `List.index` index of
+    Just position -> pure position
+    Nothing -> throw $ VarNotInScope index
+
+-- | Get the list of indices describing the scope we are in.
+currentIndexList :: LayoutM (List.List Int)
+currentIndexList = do
+  state <- get
+  ctx <- ask
+  case Map.lookup ctx.currentScope state.indexMap of
+    Just list -> pure list
+    Nothing -> throw $ MissingIndexMap ctx.currentScope
 
 -- | Find the correct way to constrain where the result of a call can be placed.
 constrain :: Position -> Position -> LayoutM LocationConstraint
@@ -366,6 +409,17 @@ constrain functionPosition@(Position _ functionScope) argumentPosition@(Position
       Below
     else
       Above
+
+-- | Get the absolute position described by a relative one.
+unscopePosition :: Position -> LayoutM Int
+unscopePosition (Position index scope) = do
+  state <- get
+  -- NOTE: we could use `note`, but I think this is cleaner, albeit more verbose
+  case Map.lookup scope state.indexMap of
+    Just list -> case List.index list index of
+      Just position -> pure position
+      Nothing -> throw $ MissingPosition list scope index
+    Nothing -> throw $ MissingIndexMap scope
 
 -- | Run the computations in the Layout monad.
 runLayoutM :: forall a. LayoutM a -> Either LayoutError a
@@ -385,25 +439,7 @@ runLayoutM = runReader ctx >>> evalState state >>> runExcept >>> extract
     , lastScope: -1
     }
 
--- -- | Transform a scoped layout into an unscoped one.
-unscopeLayout :: LayoutM ScopedLayout -> LayoutM Layout
-unscopeLayout layout = layout >>= cata algebra
-  where
-  algebra :: Algebra ScopedLayoutF (LayoutM Layout)
-  algebra = case _ of
-    Var { index, position } -> unscopePosition position <#> \position' -> var { position: position', index }
-    Call { position } function argument -> ado
-      function' <- function
-      argument' <- argument
-      position' <- unscopePosition position
-      in call position' function' argument'
-    Lambda { position, scope, args, isRoot } body -> ado
-      position' <- unscopePosition position
-      body' <- body
-      args' <- for args (_.position >>> unscopePosition)
-      in lambda { position: position', args: args', isRoot } body'
-
--- | Typeclass instances
+---------- Typeclass insitances
 derive instance eqScopeId :: Eq ScopeId
 
 derive instance ordScopeId :: Ord ScopeId
@@ -424,7 +460,12 @@ derive instance ordPosition :: Ord Position
 
 derive instance genericPosition :: Generic Position _
 
+derive instance genericLayoutError :: Generic LayoutError _
+
 instance debugPosition :: Debug.Debug Position where
+  debug = genericDebug
+
+instance debugLayoutError :: Debug LayoutError where
   debug = genericDebug
 
 instance showLayoutError :: Show LayoutError where
