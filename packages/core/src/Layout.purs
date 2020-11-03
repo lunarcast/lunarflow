@@ -10,9 +10,12 @@ module Lunarflow.Layout
   , Position(..)
   , ScopeId(..)
   , IndexMap
+  , Binder
+  , Line
+  , LayoutLikeF
+  , LayoutLike
   , addIndices
   , unscopeLayout
-  , scopeLayout
   , runLayoutM
   , runLayoutMWithState
   , markRoot
@@ -30,11 +33,13 @@ import Data.Either (Either)
 import Data.Function (on)
 import Data.Generic.Rep (class Generic)
 import Data.List as List
+import Data.List.Lazy as LazyList
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Ord (abs)
 import Data.Set as Set
 import Data.Traversable (for, minimumBy)
+import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (GroupedExpression, references)
@@ -47,27 +52,43 @@ import Run.Except (EXCEPT, note, runExcept, throw)
 import Run.Reader (READER, ask, local, runReader)
 import Run.State (STATE, get, modify, put, runState)
 
----------- Types
+---------- Type
+-- | Stuff literally everything in a layout carries around.
+type Line p r
+  = { position :: p, color :: String | r }
+
+-- | Data about a binder in scope. 
+type Binder p
+  = Line p ()
+
+-- | The base functor for all layouts
+type LayoutLikeF p v c a l
+  = AstF (Line p ( index :: Int | v )) (Line p c)
+      ( Line
+          p
+          ( args :: List.List (Line p a)
+          , isRoot :: Boolean
+          | l
+          )
+      )
+
+-- | General type for all layouts
+type LayoutLike p v c a l
+  = Mu (LayoutLikeF p v c a l)
+
 -- | Mapping from positions to vertical indices.
 type IndexMap
   = Map.Map ScopeId (List.List Int)
 
 -- | The base functor for scoped layouts.
 type ScopedLayoutF
-  = AstF { index :: Int, position :: Position } { position :: Position }
-      { args :: List.List Position
-      , scope :: ScopeId
-      , isRoot :: Boolean
-      , position :: Position
-      }
+  = LayoutLikeF Position () () ()
+      ( scope :: ScopeId
+      )
 
 -- | The base functor for layouts.
 type LayoutF
-  = AstF { position :: Int, index :: Int } Int
-      { position :: Int
-      , args :: List.List Int
-      , isRoot :: Boolean
-      }
+  = LayoutLikeF Int () () () ( scope :: ScopeId )
 
 -- | Layouts are expressions which have vertical indices for every line.
 type Layout
@@ -90,7 +111,7 @@ data Position
 -- | Read only context we can access at any time while generating layouts.
 type LayoutContext
   = { protected :: Set.Set Position
-    , positions :: List.List Position
+    , binders :: List.List (Binder Position)
     , currentScope :: ScopeId
     , near :: Int
     }
@@ -98,14 +119,16 @@ type LayoutContext
 -- | State we manipulate while generating layouts.
 type LayoutState
   = { indexMap :: IndexMap
+    , colors :: LazyList.List String
     , lastScope :: Int
     }
 
 -- TODO: support free variables 
 data LayoutError
-  = VarNotInScope Int
+  = BinderNotInScope Int
   | MissingIndexMap ScopeId
   | MissingPosition (List.List Int) ScopeId Int
+  | ColorDrought
 
 -- | The monad we generate layouts in.
 type LayoutM
@@ -132,8 +155,8 @@ addIndices :: GroupedExpression -> LayoutM ScopedLayout
 addIndices =
   para case _ of
     Var { index } -> ado
-      position <- getVarPosition index
-      in var { index, position }
+      { position, color } <- getBinder index
+      in var { index, position, color }
     Call _ (Tuple _ layoutFunction) (Tuple groupedArgument layoutArgument) -> do
       let
         -- This type annotation is here so the compiler
@@ -141,7 +164,7 @@ addIndices =
         vars :: Array _
         vars = Set.toUnfoldable $ references groupedArgument
       -- This holds all the variables referenced inside the argument of the call
-      inArgument <- Set.fromFoldable <$> for vars getVarPosition
+      inArgument <- Set.fromFoldable <$> for vars (getBinder >>> map _.position)
       -- When we draw a call, we draw the function first and then the argument.
       -- We don't want the space taken by the variables in the argument to be occupied
       -- by stuff while drawing the function.
@@ -162,17 +185,19 @@ addIndices =
         except = Set.fromFoldable [ functionPosition, argumentPosition ]
       constraint <- constrain functionPosition argumentPosition
       position <- nearFunction $ ask <#> _.near >>= placeExpression except constraint
-      pure $ call { position } function argument
+      pure $ call { position, color: getColor function } function argument
     Lambda { args: vars } (Tuple groupedBody layoutBody) -> do
       scope <- newScope
+      args <-
+        forWithIndex vars \index name -> ado
+          color <- freshColor
+          in { position: Position (varCount - index - 1) scope, color }
       initialState <- get
-      let
-        args = flip List.mapWithIndex vars \index name -> Position (varCount - index - 1) scope
       put initialState { indexMap = Map.insert scope newList initialState.indexMap }
       body <-
         flip local layoutBody \ctx ->
           ctx
-            { positions = args <> ctx.positions
+            { binders = args <> ctx.binders
             , near = 0
             , currentScope = scope
             }
@@ -183,9 +208,9 @@ addIndices =
         referenced :: Array _
         referenced = Set.toUnfoldable $ references $ lambda { args: vars } groupedBody
       -- This holds all the variables referenced inside the body of the lambda
-      inBody <- Set.fromFoldable <$> for referenced getVarPosition
+      inBody <- Set.fromFoldable <$> for referenced (getBinder >>> map _.position)
       position <- ask <#> _.near >>= placeExpression inBody Everywhere
-      pure $ lambda { position, args, scope, isRoot: false } body
+      pure $ lambda { position, args, scope, isRoot: false, color: getColor body } body
       where
       newList = List.range 0 (varCount - 1)
 
@@ -276,47 +301,37 @@ createPosition position scope = do
     Just list -> pure $ Position (List.length list) scope
     Nothing -> throw $ MissingIndexMap scope
 
+-- | Generate a new color.
+freshColor :: LayoutM String
+freshColor = do
+  state <- get
+  case LazyList.uncons state.colors of
+    Just { head, tail } -> do
+      put state { colors = tail }
+      pure head
+    Nothing -> throw ColorDrought
+
 ---------- Converstion functions
 -- | Transform a scoped layout into an unscoped one.
-unscopeLayout :: ScopedLayout -> LayoutM Layout
+unscopeLayout :: forall v c a l. LayoutLike Position v c a l -> LayoutM (LayoutLike Int v c a l)
 unscopeLayout =
   cata case _ of
-    Var { index, position } -> unscopePosition position <#> \position' -> var { position: position', index }
-    Call { position } function argument -> ado
+    Var data' -> ado
+      position <- unscopePosition data'.position
+      in var data' { position = position }
+    Call data' function argument -> ado
       function' <- function
       argument' <- argument
-      position' <- unscopePosition position
-      in call position' function' argument'
-    Lambda { position, scope, args, isRoot } body -> ado
-      position' <- unscopePosition position
+      position <- unscopePosition data'.position
+      in call data' { position = position } function' argument'
+    Lambda data' body -> ado
       body' <- body
-      args' <- for args unscopePosition
-      in lambda { position: position', args: args', isRoot } body'
-
--- | Transform an unscoped layout into a scoped one
-scopeLayout :: Layout -> LayoutM ScopedLayout
-scopeLayout =
-  cata case _ of
-    Var { position, index } -> do
-      position' <- getVarPosition index
-      pure $ var { position: position', index }
-    Call position function argument -> ado
-      function' <- function
-      argument' <- argument
-      position' <- currentScope >>= createPosition position
-      in call { position: position' } function' argument'
-    Lambda { position, args, isRoot } body -> do
-      scope <- newScope
-      modify \s -> s { indexMap = Map.insert scope List.Nil s.indexMap }
-      position' <- currentScope >>= createPosition position
-      args' <- for args $ flip createPosition scope
-      body' <-
-        flip local body \ctx ->
-          ctx
-            { positions = args' <> ctx.positions
-            , currentScope = scope
-            }
-      pure $ lambda { isRoot, scope, position: position', args: args' } body'
+      args <-
+        for data'.args \arg -> ado
+          position <- unscopePosition arg.position
+          in arg { position = position }
+      position <- unscopePosition data'.position
+      in lambda data' { position = position, args = args } body'
 
 ---------- Helpers
 -- | Move all the lines past a certain point by an arbitrary amount.
@@ -336,11 +351,10 @@ shiftLines scope { past, amount } =
 
 -- | If the expression starts off with a lambda, mark it up as the root lambda.
 -- | We do this to avoid adding an unnecessary box around the root lambda later in the pipeline.
-markRoot :: LayoutM ScopedLayout -> LayoutM ScopedLayout
-markRoot =
-  map \x -> case project x of
-    Lambda data' body -> lambda (data' { isRoot = true }) body
-    _ -> x
+markRoot :: ScopedLayout -> ScopedLayout
+markRoot x = case project x of
+  Lambda data' body -> lambda (data' { isRoot = true }) body
+  _ -> x
 
 -- | Get the absolute position described by a relative one.
 unscopePosition :: Position -> LayoutM Int
@@ -374,6 +388,13 @@ getPosition layout = case project layout of
   Call { position } _ _ -> position
   Lambda { position } _ -> position
 
+-- | Get the color of any scoped layout.
+getColor :: ScopedLayout -> String
+getColor layout = case project layout of
+  Var { color } -> color
+  Call { color } _ _ -> color
+  Lambda { color } _ -> color
+
 -- | Create a new scope with an unique id.
 newScope :: LayoutM ScopeId
 newScope = do
@@ -385,12 +406,12 @@ newScope = do
 
 -- TODO: better error messages.
 -- | Get the position a var has in the current scope.
-getVarPosition :: Int -> LayoutM Position
-getVarPosition index = do
-  positions <- ask <#> _.positions
-  case positions `List.index` index of
-    Just position -> pure position
-    Nothing -> throw $ VarNotInScope index
+getBinder :: Int -> LayoutM (Binder Position)
+getBinder index = do
+  binders <- ask <#> _.binders
+  case binders `List.index` index of
+    Just binder -> pure binder
+    Nothing -> throw $ BinderNotInScope index
 
 -- | Get the list of indices describing the scope we are in.
 currentIndexList :: LayoutM (List.List Int)
@@ -422,6 +443,7 @@ runLayoutM =
   runLayoutMWithState
     { indexMap: Map.singleton Root $ List.singleton 0
     , lastScope: -1
+    , colors: LazyList.fromFoldable [ "white", "black" ]
     }
 
 -- | Run the computations in the Layout monad.
@@ -431,7 +453,7 @@ runLayoutMWithState state = runReader ctx >>> runState state >>> runExcept >>> e
   ctx :: LayoutContext
   ctx =
     { protected: Set.empty
-    , positions: List.Nil
+    , binders: List.Nil
     , currentScope: Root
     , near: 0
     }
@@ -467,7 +489,7 @@ instance debugLayoutError :: Debug LayoutError where
 
 instance showLayoutError :: Show LayoutError where
   show = case _ of
-    VarNotInScope index -> "Variable " <> show index <> " is not in scope."
+    BinderNotInScope index -> "Variable " <> show index <> " is not in scope."
     MissingIndexMap scope -> "Cannot find index list for scope " <> show scope <> "."
     MissingPosition list scope index ->
       "Cannot find position "
@@ -477,3 +499,4 @@ instance showLayoutError :: Show LayoutError where
         <> " while looking inside "
         <> show (Array.fromFoldable list)
         <> "."
+    ColorDrought -> "Run out of colors while generating the layout"

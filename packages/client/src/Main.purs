@@ -13,6 +13,8 @@ import Data.Bifunctor (lmap)
 import Data.Either (Either(..), either)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.List as List
+import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable as Nullable
 import Data.Tuple (Tuple(..), snd)
@@ -27,11 +29,12 @@ import Lunarflow.Ast.Grouped (groupExpression)
 import Lunarflow.Debug (showPretty)
 import Lunarflow.Function ((|>))
 import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
-import Lunarflow.Layout (LayoutError, LayoutState, ScopedLayout, addIndices, markRoot, runLayoutM, runLayoutMWithState, unscopeLayout)
+import Lunarflow.Layout (LayoutError, LayoutState, ScopeId(..), ScopedLayout, addIndices, markRoot, runLayoutMWithState, unscopeLayout)
 import Lunarflow.Parser (parseLambdaCalculus)
 import Lunarflow.Reduction (tryEtaReducing)
 import Lunarflow.Render (render, runRenderM)
 import Lunarflow.Renderer.Canvas (fillScreen, fitIntoBounds, onResize)
+import Lunarflow.Renderer.Constants (colors)
 import Lunarflow.Renderer.WithHeight (withHeights)
 import Partial.Unsafe (unsafeCrashWith)
 import Text.Parsing.Parser (ParseError)
@@ -68,9 +71,15 @@ mkScopedLayout text = do
     |> withDebrujinIndices
     |> groupExpression
     |> addIndices
-    |> markRoot
-    |> runLayoutM
+    |> map markRoot
+    |> runLayoutMWithState state
     |> lmap LayoutCreationError
+  where
+  state =
+    { colors: colors
+    , indexMap: Map.singleton Root $ List.singleton 0
+    , lastScope: -1
+    }
 
 -- | This t(Tuple stabd scopedLayout)es
 mkGeometry :: Tuple LayoutState ScopedLayout -> Either Error Geometry

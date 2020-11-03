@@ -8,10 +8,9 @@ import Data.Array as Array
 import Data.FoldableWithIndex (foldrWithIndex)
 import Data.Int (floor, toNumber)
 import Data.List as List
-import Data.List.Lazy as LazyList
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
-import Data.Traversable (sequence, sum)
+import Data.Traversable (sum)
 import Data.Tuple (Tuple(..))
 import Data.Typelevel.Num (d0, d1)
 import Data.Vec (vec2, (!!))
@@ -19,30 +18,23 @@ import Lunarflow.Ast (AstF(..))
 import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
 import Lunarflow.Function ((|>))
-import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, callCircleColor, colors, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
+import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, callCircleColor, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
 import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMeasures)
 import Lunarflow.Vector as Vector
 import Matryoshka (Algebra, cata)
 import Run (Run, extract)
 import Run.Reader (READER, ask, local, runReader)
-import Run.State (STATE, evalState, get, put)
 
 type RenderContext
   = { starts :: Array Int
     , xStart :: Int
     , slices :: Array YMeasures
-    , colors :: Array String
     , yOffsets :: Array Int
-    }
-
-type RenderState
-  = { colors :: LazyList.List String
     }
 
 type RenderM
   = Run
       ( reader :: READER RenderContext
-      , state :: STATE RenderState
       )
 
 type RenderList
@@ -73,14 +65,11 @@ render (Tuple layout rootMeasures) =
 
       updatedYOffset = yOffset + getY 0 position (sum heights) slices
     --
-    newColors <- sequence $ Array.replicate argCount freshColor
     bodyRenderList <-
       local
         ( updateContext
             { argCount
-            , newColors
-            , yOffset:
-              updatedYOffset
+            , yOffset: updatedYOffset
             , start: xStart
             }
         )
@@ -122,22 +111,18 @@ render (Tuple layout rootMeasures) =
         }
     pure renderList
     where
-    updateContext { argCount, newColors, yOffset, start } ctx =
+    updateContext { argCount, yOffset, start } ctx =
       ctx
         { slices = (Arary.replicate argCount heights) <> ctx.slices
-        , colors = newColors <> ctx.colors
         , yOffsets = Array.replicate argCount yOffset <> ctx.yOffsets
         , starts = Array.replicate argCount start <> ctx.starts
         }
 
-  algebra (Var { position, index }) = do
-    { xStart, slices, colors } <- ask
+  algebra (Var { position, index, color }) = do
+    { xStart, slices } <- ask
     yOffset <- getYOffset index
     start <- getStart index
-    -- TODO: don't do stupid stuff like this
     let
-      color = fromMaybe "black" (Array.index colors index)
-
       y = yOffset + linePadding + getY index position 1 slices
 
       width = max lineWidth (xStart - start)
@@ -158,7 +143,7 @@ render (Tuple layout rootMeasures) =
         ]
       }
 
-  algebra (Call position mkFunc mkArg) = do
+  algebra (Call { position } mkFunc mkArg) = do
     -- Get stuff from the environment
     slices <- ask <#> _.slices
     yOffset <- getYOffset 0
@@ -273,16 +258,6 @@ render (Tuple layout rootMeasures) =
         }
     pure renderList
 
-freshColor :: forall r. Run ( state :: STATE RenderState | r ) String
-freshColor = do
-  state <- get
-  case LazyList.uncons state.colors of
-    Just { head, tail } -> do
-      put state { colors = tail }
-      pure head
-    -- TODO: don't do stupid stuff like this
-    Nothing -> pure "black"
-
 getStart :: forall r. Int -> Run ( reader :: READER RenderContext | r ) Int
 getStart x = ado
   starts <- ask <#> _.starts
@@ -371,18 +346,12 @@ getYOffset at = ask <#> (_.yOffsets >>> flip Array.index at >>> fromMaybe 0)
 
 -- | Run a computation in the render monad.
 runRenderM :: forall a. RenderM a -> a
-runRenderM = evalState state >>> runReader ctx >>> extract
+runRenderM = runReader ctx >>> extract
   where
   ctx :: RenderContext
   ctx =
     { slices: []
-    , colors: []
     , yOffsets: []
     , starts: []
     , xStart: 0
-    }
-
-  state :: RenderState
-  state =
-    { colors: colors
     }

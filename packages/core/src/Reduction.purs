@@ -25,11 +25,11 @@ betaReduce = undefined
 updatePositions :: (Position -> Position) -> ScopeId -> ScopedLayout -> LayoutM ScopedLayout
 updatePositions f scope =
   cata case _ of
-    Call { position } function argument -> ado
+    Call data' function argument -> ado
       function' <- function
       argument' <- argument
-      in call { position: go position } function' argument'
-    Var { index, position } -> pure $ var { index, position: go position }
+      in call data' { position = go data'.position } function' argument'
+    Var data' -> pure $ var data' { position = go data'.position }
     Lambda data' body -> ado
       body' <- body
       in lambda data' { position = go data'.position } body'
@@ -68,7 +68,7 @@ introduce position { from, into } layout = do
 -- | Transform expressions of the shape (\x -> f x) into f
 etaReduce :: ScopedLayout -> LayoutM (Maybe ScopedLayout)
 etaReduce layout = case project layout |> map project |> map (map project) of
-  Lambda { isRoot, scope, position, args: List.Cons _ remaining } (Call _ function (Var { index: 0 }))
+  Lambda data'@{ scope, position, args: List.Cons _ remaining } (Call _ function (Var { index: 0 }))
     | not (contains 0 $ embed function) ->
       Just
         <$> case remaining of
@@ -77,7 +77,16 @@ etaReduce layout = case project layout |> map project |> map (map project) of
               result <- introduce position { from: scope, into: outerScope } $ shift 0 (-1) $ embed function
               modify \s -> s { indexMap = Map.delete scope s.indexMap }
               pure result
-            _ -> pure $ lambda { isRoot, scope, position, args: remaining } $ shift 0 (-1) $ embed function
+            _ ->
+              pure
+                $ lambda
+                    data'
+                      { scope = scope
+                      , position = position
+                      , args = remaining
+                      }
+                $ shift 0 (-1)
+                $ embed function
   _ -> pure Nothing
 
 -- TODO: abstract this away somehow
