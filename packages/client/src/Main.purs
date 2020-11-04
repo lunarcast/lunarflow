@@ -18,7 +18,6 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable as Nullable
 import Data.Tuple (Tuple(..), snd)
-import Debug.Trace (traceM)
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Console as Console
@@ -26,7 +25,6 @@ import Effect.Ref as Ref
 import Graphics.Canvas (CanvasElement, Context2D, getCanvasElementById, getContext2D, restore, save)
 import Lunarflow.Ast (withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
-import Lunarflow.Debug (showPretty)
 import Lunarflow.Function ((|>))
 import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
 import Lunarflow.Layout (LayoutError, LayoutState, ScopeId(..), ScopedLayout, addIndices, markRoot, runLayoutMWithState, unscopeLayout)
@@ -84,7 +82,7 @@ mkScopedLayout text = do
 -- | This t(Tuple stabd scopedLayout)es
 mkGeometry :: Tuple LayoutState ScopedLayout -> Either Error Geometry
 mkGeometry (Tuple state scopedLayout) = do
-  traceM $ showPretty scopedLayout
+  -- traceM $ showPretty scopedLayout
   layout <-
     unscopeLayout scopedLayout
       |> runLayoutMWithState state

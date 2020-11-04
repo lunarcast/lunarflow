@@ -1,26 +1,28 @@
 {
   "cSpell.words": [
+    "Entrypoint",
     "Lunarflow",
+    "brotli",
     "codegen",
     "compat",
     "corefn",
+    "devtool",
     "dhall",
     "esbuild",
     "hacky",
     "idrc",
+    "iife",
     "outdir",
     "pcss",
     "peaceiris",
     "pnpm",
     "postbuild",
     "preact",
+    "prebuild",
     "purescript",
     "purs",
     "spago",
     "thomashoneyman"
   ],
-  "scss.lint.unknownAtRules": "ignore",
-  "files.associations": {
-    "*.pcss": "scss"
-  }
+  "scss.lint.unknownAtRules": "ignore"
 }
