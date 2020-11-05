@@ -15,7 +15,8 @@ import Data.Tuple (Tuple(..), uncurry)
 import Lunarflow.Array (maxZip)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Label (class Label)
-import Lunarflow.Layout (Layout, LayoutF, LayoutLikeF, ScopeId)
+import Lunarflow.Layout (Layout, LayoutF, LayoutLikeF)
+import Lunarflow.LayoutM (ScopeId)
 import Lunarflow.Mu (Mu)
 import Matryoshka (Algebra, cata, project)
 import Record as Record
@@ -69,11 +70,11 @@ withHeights = cata algebra
 
 -- | Update an ymap at an arbitrary index, position and value.
 createArray :: (Label "position" => Int) -> (Label "value" => Int) -> YMeasures -> YMeasures
-createArray position value = mergeArrays $ Array.snoc (Array.replicate position 1) value
+createArray position value = mergeArrays $ Array.snoc (Array.replicate position 0) value
 
 -- | Pretty much a semigroup implementation for YMeasures
 mergeArrays :: Array Int -> Array Int -> Array Int
-mergeArrays arr arr' = maxZip 1 1 arr arr' <#> uncurry max
+mergeArrays arr arr' = maxZip 0 0 arr arr' <#> uncurry max
 
 -- | Get the position an YLayout is at.
 getPosition :: YLayout -> Int

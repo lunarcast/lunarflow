@@ -18,6 +18,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable as Nullable
 import Data.Tuple (Tuple(..), snd)
+import Debug.Trace (traceM)
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Console as Console
@@ -25,9 +26,12 @@ import Effect.Ref as Ref
 import Graphics.Canvas (CanvasElement, Context2D, getCanvasElementById, getContext2D, restore, save)
 import Lunarflow.Ast (withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
+import Lunarflow.Debug (debugSpy, showPretty)
+import Lunarflow.ErrorStack (ErrorStack)
 import Lunarflow.Function ((|>))
 import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
-import Lunarflow.Layout (LayoutError, LayoutState, ScopeId(..), ScopedLayout, addIndices, markRoot, runLayoutMWithState, unscopeLayout)
+import Lunarflow.Layout (ScopedLayout, addIndices, markRoot, unscopeLayout)
+import Lunarflow.LayoutM (LayoutError, LayoutState, ScopeId(..), runLayoutMWithState)
 import Lunarflow.Parser (parseLambdaCalculus)
 import Lunarflow.Reduction (tryEtaReducing)
 import Lunarflow.Render (render, runRenderM)
@@ -59,7 +63,7 @@ data Action
 -- | Possible errors which can occur while generating the geometry.
 data Error
   = ParsingError ParseError
-  | LayoutCreationError LayoutError
+  | LayoutCreationError (ErrorStack String LayoutError)
 
 -- | This takes a lambda calculus expression and tries to build an unscoped layout out of it.
 mkScopedLayout :: String -> Either Error (Tuple LayoutState ScopedLayout)
@@ -88,6 +92,7 @@ mkGeometry (Tuple state scopedLayout) = do
       |> runLayoutMWithState state
       |> lmap LayoutCreationError
       |> map snd
+  traceM $ showPretty layout
   layout
     |> withHeights
     |> render
@@ -122,6 +127,8 @@ handleAction input state@{ value, error, layout } = case _ of
         , layout: either (const Nothing) Just layout'
         }
       where
+      a = debugSpy layoutState.indexMap
+
       layout' = scopedLayout |> tryEtaReducing |> runLayoutMWithState layoutState |> lmap LayoutCreationError
   NewExpression text ->
     flip (handleAction input) RenderLayout
