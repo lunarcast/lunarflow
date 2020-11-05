@@ -22,7 +22,6 @@
     "esbuild-loader": "^2.4.0",
     "html-webpack-plugin": "^4.5.0",
     "mini-css-extract-plugin": "^1.2.1",
-    "node-sass": "^5.0.0",
     "optimize-css-assets-webpack-plugin": "^5.0.4",
     "postcss": "^8.1.1",
     "postcss-font-magician": "^2.3.1",
@@ -42,6 +41,8 @@
     "@thi.ng/geom": "^1.13.0",
     "@thi.ng/hiccup-canvas": "^1.1.10",
     "@thi.ng/vectors": "^4.7.0",
-    "preact": "^10.5.5"
+    "fibers": "^5.0.0",
+    "preact": "^10.5.5",
+    "sass": "^1.29.0"
   }
 }
