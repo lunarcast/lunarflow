@@ -9,13 +9,16 @@ import Data.Foldable (foldr)
 import Data.List as List
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
+import Debug.Trace (traceM)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (contains, shift)
+import Lunarflow.Debug (showPretty)
 import Lunarflow.Function ((|>))
-import Lunarflow.Layout (LayoutError(..), LayoutM, Position(..), ScopeId, ScopedLayout, currentScope, shiftLines, unscopePosition)
+import Lunarflow.Layout (ScopedLayout, shiftLines)
+import Lunarflow.LayoutM (LayoutM, Position(..), ScopeId, currentScope, getIndexMap, unscopePosition)
 import Matryoshka (cata, embed, project)
-import Run.Except (throw)
-import Run.State (get, modify, put)
+import Run.Reader (local)
+import Run.State (modify)
 import Undefined (undefined)
 
 betaReduce :: ScopedLayout -> ScopedLayout
@@ -39,31 +42,30 @@ updatePositions f scope =
 -- | Introduce an index list at any point inside another one
 introduce :: Position -> { from :: ScopeId, into :: ScopeId } -> ScopedLayout -> LayoutM ScopedLayout
 introduce position { from, into } layout = do
-  state <- get
-  case Map.lookup from state.indexMap, Map.lookup into state.indexMap of
-    Just listFrom, Just listInto -> do
-      past <- unscopePosition position <#> (_ - 1)
-      shiftLines into { amount: height, past }
-      let
-        moved = listFrom <#> (\a -> a + past + 0)
-      put
-        state
-          { indexMap =
-            Map.update
-              ( (_ <> moved) >>> Just
-              )
-              into
-              state.indexMap
-          }
-      -- TODO: put stuff sharing a line with this at the middle
-      layout' <- updatePositions (\(Position index _) -> Position (index + movedCount) into) from layout
-      pure layout'
-      where
-      height = foldr max (-1) listFrom + 1
+  listFrom <- getIndexMap from
+  listInto <- getIndexMap into
+  let
+    height = foldr max (-1) listFrom
 
-      movedCount = List.length listInto
-    Nothing, _ -> throw $ MissingIndexMap from
-    _, _ -> throw $ MissingIndexMap into
+    movedCount = List.length listInto
+  past <- unscopePosition position <#> (_ - 1)
+  traceM $ showPretty { listInto, listFrom }
+  shiftLines into { amount: height, past }
+  traceM { past, height }
+  let
+    moved = listFrom <#> (\a -> a + past + 1)
+  modify \state ->
+    state
+      { indexMap =
+        Map.update
+          ( (_ <> moved) >>> Just
+          )
+          into
+          state.indexMap
+      }
+  -- TODO: put stuff sharing a line with this at the middle
+  layout' <- updatePositions (\(Position index _) -> Position (index + movedCount) into) from layout
+  pure layout'
 
 -- | Transform expressions of the shape (\x -> f x) into f
 etaReduce :: ScopedLayout -> LayoutM (Maybe ScopedLayout)
@@ -107,7 +109,7 @@ tryEtaReducing' layout = case project layout of
     case lambda' of
       Just _ -> pure lambda'
       Nothing -> do
-        body' <- tryEtaReducing' body
+        body' <- local (_ { currentScope = data'.scope }) $ tryEtaReducing' body
         case body' of
           Just body'' -> pure $ Just $ lambda data' body''
           Nothing -> pure Nothing
