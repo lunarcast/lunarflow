@@ -1,3 +1,17 @@
+# [1.4.0](https://github.com/lunarcast/lunarflow/compare/v1.3.1...v1.4.0) (2020-11-05)
+
+
+### Bug Fixes
+
+* **core:** fixed overlapping lines after eta reducing ([9631d2b](https://github.com/lunarcast/lunarflow/commit/9631d2b44215bf13cf2f513c2e05b02398a86cda)), closes [#1](https://github.com/lunarcast/lunarflow/issues/1)
+
+
+### Features
+
+* **client:** remove unused space between lines ([41e537d](https://github.com/lunarcast/lunarflow/commit/41e537dd84aac15b57dd0b815c0328d20b19f935))
+* **core:** reduction preserves the colors ([c6d481e](https://github.com/lunarcast/lunarflow/commit/c6d481e919c0f6fafbb889ccb3f72408e4f3011b))
+* **utils:** error stacks ([6c599f7](https://github.com/lunarcast/lunarflow/commit/6c599f7f9756fbad69ab9898a3022ad798969cf7))
+
 ## [1.3.1](https://github.com/lunarcast/lunarflow/compare/v1.3.0...v1.3.1) (2020-11-02)
 
 
