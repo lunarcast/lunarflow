@@ -9,10 +9,8 @@ import Data.Foldable (foldr)
 import Data.List as List
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
-import Debug.Trace (traceM)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (contains, shift)
-import Lunarflow.Debug (showPretty)
 import Lunarflow.Function ((|>))
 import Lunarflow.Layout (ScopedLayout, shiftLines)
 import Lunarflow.LayoutM (LayoutM, Position(..), ScopeId, currentScope, getIndexMap, unscopePosition)
@@ -49,9 +47,7 @@ introduce position { from, into } layout = do
 
     movedCount = List.length listInto
   past <- unscopePosition position <#> (_ - 1)
-  traceM $ showPretty { listInto, listFrom }
   shiftLines into { amount: height, past }
-  traceM { past, height }
   let
     moved = listFrom <#> (\a -> a + past + 1)
   modify \state ->

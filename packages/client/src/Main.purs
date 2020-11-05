@@ -18,7 +18,6 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Nullable as Nullable
 import Data.Tuple (Tuple(..), snd)
-import Debug.Trace (traceM)
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Console as Console
@@ -26,7 +25,6 @@ import Effect.Ref as Ref
 import Graphics.Canvas (CanvasElement, Context2D, getCanvasElementById, getContext2D, restore, save)
 import Lunarflow.Ast (withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
-import Lunarflow.Debug (debugSpy, showPretty)
 import Lunarflow.ErrorStack (ErrorStack)
 import Lunarflow.Function ((|>))
 import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
@@ -92,7 +90,6 @@ mkGeometry (Tuple state scopedLayout) = do
       |> runLayoutMWithState state
       |> lmap LayoutCreationError
       |> map snd
-  traceM $ showPretty layout
   layout
     |> withHeights
     |> render
@@ -127,8 +124,6 @@ handleAction input state@{ value, error, layout } = case _ of
         , layout: either (const Nothing) Just layout'
         }
       where
-      a = debugSpy layoutState.indexMap
-
       layout' = scopedLayout |> tryEtaReducing |> runLayoutMWithState layoutState |> lmap LayoutCreationError
   NewExpression text ->
     flip (handleAction input) RenderLayout

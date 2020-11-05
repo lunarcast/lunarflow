@@ -24,7 +24,6 @@ import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (GroupedExpression, references)
-import Lunarflow.Debug (debugSpy)
 import Lunarflow.ErrorStack (ErrorStack(..))
 import Lunarflow.Function ((|>))
 import Lunarflow.LayoutM (LayoutM, Line, Position(..), ScopeId(..), while, currentScope, freshColor, getBinder, getIndexMap, missingPosition, unscopePosition)
@@ -268,7 +267,7 @@ shiftLines scope { past, amount } =
   modify \state ->
     state
       { indexMap =
-        Map.update (debugSpy >>> map update >>> debugSpy >>> Just)
+        Map.update (map update >>> Just)
           scope
           state.indexMap
       }
