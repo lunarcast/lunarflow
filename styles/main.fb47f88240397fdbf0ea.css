@@ -1,0 +1,2 @@
+html,body{padding:0;margin:0;height:100vh;width:100vw;overflow:hidden}canvas{background:#1a1730}#root{position:absolute;bottom:0;left:0;background:#241b2f;display:-webkit-box;display:-ms-flexbox;display:flex}#root>*{margin-right:0.3rem}#root>#error{color:#ff4444}#root #input,#root button{font-size:2rem}
+
