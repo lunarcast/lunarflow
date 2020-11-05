@@ -10,6 +10,7 @@
   , "transformers"
   , "fixed-points"
   , "matryoshka"
+  , "stringutils"
   ]
 , packages = ../../packages.dhall
 , sources = [ "src/**/*.purs" ]
