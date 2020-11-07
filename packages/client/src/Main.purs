@@ -24,7 +24,9 @@ import Effect.Console as Console
 import Effect.Ref as Ref
 import Graphics.Canvas (CanvasElement, Context2D, getCanvasElementById, getContext2D, restore, save)
 import Lunarflow.Ast (withDebrujinIndices)
-import Lunarflow.Ast.Grouped (groupExpression)
+import Lunarflow.Ast.Binary (groupedToBinary, indexedToBinary, showBinaryAst, toBuffer)
+import Lunarflow.Ast.Grouped (groupExpression, ungroupExpression)
+import Lunarflow.Debug (table)
 import Lunarflow.ErrorStack (ErrorStack)
 import Lunarflow.Function ((|>))
 import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
@@ -143,6 +145,23 @@ handleAction input state@{ value, error, layout } = case _ of
       Right geometry' -> do
         liftEffect $ Ref.write geometry' input.ref
         liftEffect input.render
+        let
+          groupedBinaryAst = groupedToBinary $ snd layout'
+
+          binaryAst = indexedToBinary $ ungroupExpression const $ snd layout'
+
+          a = toBuffer groupedBinaryAst
+        liftEffect
+          $ table
+              { normal:
+                { size: binaryAst.size
+                , bits: showBinaryAst binaryAst
+                }
+              , grouped:
+                { size: groupedBinaryAst.size
+                , bits: showBinaryAst groupedBinaryAst
+                }
+              }
         pure state { error = Nothing }
       where
       geometry = mkGeometry layout'

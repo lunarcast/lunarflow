@@ -1,33 +1,53 @@
 module Lunarflow.Ast.Grouped where
 
 import Prelude
+import Data.List (foldr)
 import Data.List as List
 import Data.Maybe (Maybe(..))
 import Data.Set as Set
-import Lunarflow.Ast (Ast, AstF(..), Expression, call, lambda, var)
+import Data.Symbol (SProxy(..))
+import Lunarflow.Ast (AstF(..), DeBrujinLike, call, lambda, var)
 import Lunarflow.Function (Endomorphism)
-import Matryoshka (Algebra, cata, project)
+import Matryoshka (cata, project)
+import Prim.Row as Row
+import Record as Record
 
 -- TODO: Make the argument list nonempty.
 -- | A chunk of lambda calculus ast which has itconsecutive lambdas gruoped.
 type GroupedLike v c a l
-  = Ast { index :: Int | v } c { args :: List.List a | l }
+  = DeBrujinLike v c { args :: List.List a | l }
 
 -- | Grouped expressions merge consecutive lambdas into groups.
 type GroupedExpression
   = GroupedLike () Unit String ()
 
+-- | Typelevel strnig for the field the arg list is stored in
+_args :: SProxy "args"
+_args = SProxy
+
 -- | Merge all the lambdas in groups.
-groupExpression :: Expression -> GroupedExpression
-groupExpression = cata algebra
-  where
-  algebra :: Algebra (AstF Int Unit String) GroupedExpression
-  algebra = case _ of
+groupExpression :: forall v c l. DeBrujinLike v c l -> GroupedLike v c l ()
+groupExpression =
+  cata case _ of
     Call data' a b -> call data' a b
-    Var data' -> var { index: data' }
+    Var data' -> var data'
     Lambda name body -> case project body of
       Lambda { args } body' -> lambda { args: name `List.Cons` args } body'
       _ -> lambda { args: List.singleton name } body
+
+-- | Split all the lambdas from groups.
+ungroupExpression :: forall v c a l r. Row.Lacks "args" l => (a -> Record l -> r) -> GroupedLike v c a l -> DeBrujinLike v c r
+ungroupExpression f =
+  cata case _ of
+    Call data' a b -> call data' a b
+    Var data' -> var data'
+    Lambda data' body -> foldr createLambda body data'.args
+      where
+      createLambda arg inner = lambda (f arg rest) inner
+
+      args = data'.args
+
+      rest = Record.delete _args data'
 
 -- | Find all referenced vars inside an expression.
 references :: GroupedExpression -> Set.Set Int

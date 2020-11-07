@@ -4,6 +4,7 @@ module Lunarflow.Ast
   , RawExpression
   , Expression
   , WithIndex
+  , DeBrujinLike
   , withDebrujinIndices
   , call
   , lambda
@@ -21,7 +22,7 @@ import Data.List as List
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Lunarflow.Mu (Mu, TacitRepr)
-import Matryoshka (class Corecursive, Algebra, GAlgebra, cata, embed, para, project)
+import Matryoshka (class Corecursive, Algebra, cata, embed, para, project)
 
 -- | The meat and potatoes of representing an expression.
 -- |
@@ -60,9 +61,13 @@ lambda l t = embed (Lambda l t)
 type RawExpression
   = Ast String Unit String
 
+-- | Expressions using de brujin indidces
+type DeBrujinLike v c l
+  = Ast { index :: Int | v } c l
+
 -- | Lambda calculus expression using de brujin indices.
 type Expression
-  = Ast Int Unit String
+  = DeBrujinLike () Unit String
 
 type WithIndex r
   = ( index :: Int | r )
@@ -83,8 +88,8 @@ withDebrujinIndices expr = runReader (cata algebra expr) List.Nil
     Var name -> ado
       maybeIndex <- asks $ List.findIndex (eq name)
       in case maybeIndex of
-        Just index -> var index
-        Nothing -> var (-1)
+        Just index -> var { index }
+        Nothing -> var { index: (-1) }
 
 --  Pretty printing stuff:
 -- | Check if an ast chunk needs to be wrapped in parenthesis for printing
@@ -109,12 +114,10 @@ lambdaChar :: String
 lambdaChar = "λ"
 
 -- | Print an expression which uses de brujin indices.
-printDeBrujin :: forall c l. Ast Int c l -> String
-printDeBrujin = para algebra
-  where
-  algebra :: GAlgebra (Tuple (Ast Int c l)) (AstF Int c l) String
-  algebra = case _ of
-    Var index -> show index
+printDeBrujin :: forall v c l. DeBrujinLike v c l -> String
+printDeBrujin =
+  para case _ of
+    Var { index } -> show index
     Lambda _ (Tuple _ body) -> lambdaChar <> body
     Call _ (Tuple funcAst func) (Tuple argAst arg) ->
       parenthesiseWhen (needsParenthesis true $ project funcAst) func
