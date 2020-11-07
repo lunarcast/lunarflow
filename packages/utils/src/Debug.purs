@@ -20,3 +20,6 @@ myDebug = Console.log <<< showPretty
 -- | Similar to spy but requires a debug instance.
 debugSpy :: forall a. Debug a => DebugWarning => a -> a
 debugSpy a = unsafePerformEffect (a <$ myDebug a)
+
+-- | Raw binding to console.table
+foreign import table :: forall a. a -> Effect Unit
