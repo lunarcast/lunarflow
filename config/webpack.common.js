@@ -36,6 +36,13 @@ module.exports = {
         options: {
           loader: "jsx"
         }
+      },
+      {
+        test: /\.ts$/,
+        loader: "esbuild-loader",
+        options: {
+          loader: "ts"
+        }
       }
     ]
   },

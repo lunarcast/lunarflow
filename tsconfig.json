@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "moduleResolution": "Node",
+    "module": "ESNext",
+    "target": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ESNext.Array", "ESNext"],
+    "downlevelIteration": true,
+    "strictNullChecks": true,
+    "strictBindCallApply": true,
+    "esModuleInterop": true,
+    "importHelpers": true,
+    "baseUrl": "."
+  },
+  "include": ["src", "packages"],
+  "exclude": ["node_modules"]
+}

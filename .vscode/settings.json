@@ -8,6 +8,7 @@
     "corefn",
     "devtool",
     "dhall",
+    "downlevel",
     "esbuild",
     "hacky",
     "idrc",
