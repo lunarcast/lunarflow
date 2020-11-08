@@ -1,3 +1,12 @@
+# [1.5.0](https://github.com/lunarcast/lunarflow/compare/v1.4.0...v1.5.0) (2020-11-08)
+
+
+### Features
+
+* **core:** binary lambda calculus ([56f5f04](https://github.com/lunarcast/lunarflow/commit/56f5f041ecfcfb10470ee5e0fab0d308797a3e18))
+* **core:** nearley parser ([adb4c64](https://github.com/lunarcast/lunarflow/commit/adb4c649da9ee3a9afc2b6a3810bd514afc94b30))
+* helper for Console.table-ing ([5aed699](https://github.com/lunarcast/lunarflow/commit/5aed699e2453f01ea3c88962b0267759d1b9bcaa))
+
 # [1.4.0](https://github.com/lunarcast/lunarflow/compare/v1.3.1...v1.4.0) (2020-11-05)
 
 
