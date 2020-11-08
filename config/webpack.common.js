@@ -43,6 +43,14 @@ module.exports = {
         options: {
           loader: "ts"
         }
+      },
+      {
+        test: /\.ne$/,
+        use: [
+          {
+            loader: "nearley-loader"
+          }
+        ]
       }
     ]
   },
