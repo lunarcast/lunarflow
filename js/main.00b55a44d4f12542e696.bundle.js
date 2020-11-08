@@ -1,1 +1,0 @@
-(self.webpackChunklunarflow=self.webpackChunklunarflow||[]).push([[179],{5928:(e,o,l)=>{console.log("Loaded root"),console.time("Loaded purescript"),Promise.all([l.e(526),l.e(968)]).then(l.t.bind(l,8968,7)).then((({main:e})=>{console.timeEnd("Loaded purescript"),e()}))},1705:()=>{}},0,[[5928,666],[1705,666]]]);
