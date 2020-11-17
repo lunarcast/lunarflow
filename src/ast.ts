@@ -5,7 +5,7 @@ type TermInput<T> = {
   variable: (name: string) => T
 }
 
-type Term<T> = (input: TermInput<T>) => T
+export type Term<T> = (input: TermInput<T>) => T
 
 export const call = <T>(left: Term<T>, right: Term<T>): Term<T> => (config) =>
   config.application(left(config), right(config))

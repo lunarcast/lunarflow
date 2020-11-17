@@ -1,102 +1,40 @@
-module Lunarflow.Parser
-  ( LunarflowParser
-  , expression
-  , parseLambdaCalculus
-  , parseLambdaCalculus'
-  , unsafeParseLambdaCalculus
-  ) where
+module Lunarflow.Parser where
 
 import Prelude
-import Control.Lazy (fix)
-import Control.Plus (empty, (<|>))
-import Data.Array.NonEmpty (some)
-import Data.Array.NonEmpty as NonEmptyArray
-import Data.Either (Either, fromRight)
-import Data.Foldable (foldl)
-import Data.Foldable as Foldable
-import Data.Identity (Identity)
-import Data.NonEmpty (NonEmpty(..))
+import Data.Either (Either(..), fromRight)
+import Data.Function.Uncurried (Fn2, mkFn2)
 import Lunarflow.Ast (RawExpression, call, lambda, var)
 import Partial.Unsafe (unsafePartial)
-import Text.Parsing.Parser (ParseError, Parser, ParserT, runParser)
-import Text.Parsing.Parser.String (oneOf)
-import Text.Parsing.Parser.Token (GenLanguageDef(..), GenTokenParser, LanguageDef, alphaNum, letter, makeTokenParser)
 
--- | Punctuation to start the declaration of a lambda expression.
-lambdaStarts :: Array String
-lambdaStarts = [ "\\", "λ" ]
+-- | Ts representation of asts.
+type ForeignAst a
+  = { abstraction :: Fn2 String a a
+    , application :: Fn2 a a a
+    , variable :: String -> a
+    } ->
+    a
 
--- | Punctuation to start the declaration of the body of a lambda expression.
-lambdaBodyStarts :: Array String
-lambdaBodyStarts = [ "->", "." ]
+-- | Parse a lambda calculus expression without processing the foreign ast away.
+parseLambdaCalculus' :: forall a. String -> Either String (ForeignAst a)
+parseLambdaCalculus' = parseImpl { left: Left, right: Right }
 
--- | Declaration for lambda calculus (with comments).
--- | This is used to generate the lexer
-language :: LanguageDef
-language =
-  LanguageDef
-    { commentStart: "{-"
-    , commentEnd: "-}"
-    , commentLine: "--"
-    , nestedComments: true
-    , opStart: empty
-    , opLetter: empty
-    , caseSensitive: true
-    , reservedOpNames: lambdaStarts <> lambdaBodyStarts
-    , reservedNames: []
-    , identStart: letter
-    , identLetter: alphaNum <|> oneOf [ '_', '\'' ]
-    }
-
--- | The lexer
-tokenParser :: GenTokenParser String Identity
-tokenParser = makeTokenParser language
-
--- | Parsers which run in the identity monad and parse strings
-type LunarflowParser r
-  = Parser String r
-
--- | Parser for individual lambda calculus expressions.
--- | This references itself so we use it within a fixpoint operator
-expression' :: LunarflowParser RawExpression -> LunarflowParser RawExpression
-expression' expr = do
-  -- expression'' <- atom
-  (NonEmpty expression'' args) <- NonEmptyArray.toNonEmpty <$> some atom
-  pure $ foldl (call unit) expression'' args
+-- | Parse a lambda calculus expression.
+parseLambdaCalculus :: String -> Either String RawExpression
+parseLambdaCalculus = parseLambdaCalculus' >>> map run
   where
-  { parens, identifier, reservedOp } = tokenParser
-
-  atom :: LunarflowParser RawExpression
-  atom = wrapped <|> lambdaExpr <|> variable
-
-  wrapped :: LunarflowParser RawExpression
-  wrapped = parens expr
-
-  variable :: ParserT String Identity RawExpression
-  variable = var <$> identifier
-
-  lambdaExpr :: ParserT String Identity RawExpression
-  lambdaExpr = do
-    Foldable.oneOf $ reservedOp <$> lambdaStarts
-    (NonEmpty arg args) <- NonEmptyArray.toNonEmpty <$> NonEmptyArray.reverse <$> some identifier
-    Foldable.oneOf $ reservedOp <$> lambdaBodyStarts
-    body <- expr
-    let
-      baseAst = lambda arg body
-    pure $ foldl (flip lambda) baseAst args
-
--- | Parser for lambda calculus.
-expression :: LunarflowParser RawExpression
-expression = fix expression'
-
--- | Try parsing a string into a lambda calculus ast.
-parseLambdaCalculus :: String -> Either ParseError RawExpression
-parseLambdaCalculus = flip runParser expression
-
--- | Partial function I usually use in the repl.
-parseLambdaCalculus' :: Partial => String -> RawExpression
-parseLambdaCalculus' = fromRight <<< parseLambdaCalculus
+  run :: ForeignAst RawExpression -> RawExpression
+  run ast =
+    ast
+      { abstraction: mkFn2 lambda
+      , application: mkFn2 (call unit)
+      , variable: var
+      }
 
 -- | Unsafe version of parseLambdaCalculus I usually use for debugging.
 unsafeParseLambdaCalculus :: String -> RawExpression
-unsafeParseLambdaCalculus = unsafePartial parseLambdaCalculus'
+unsafeParseLambdaCalculus = unsafePartial (parseLambdaCalculus >>> fromRight)
+
+foreign import parseImpl ::
+  forall r.
+  { left :: forall e a. e -> Either e a, right :: forall e a. a -> Either e a } ->
+  String -> Either String (ForeignAst r)

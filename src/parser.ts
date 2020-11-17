@@ -1,14 +1,24 @@
-// @ts-ignore
+// @ts-ignore nearley import
 import syntax from "./syntax.ne"
 import { Parser, Grammar } from "nearley"
+import { PurescriptEither } from "./types"
+import type { Term } from "./ast"
 
-const parser = new Parser(Grammar.fromCompiled(syntax))
+const grammar = Grammar.fromCompiled(syntax)
 
-parser.feed("\\f a b. f b a \\l. l")
-const result = parser.results[0]({
-  variable: (d) => d,
-  abstraction: (name, body) => ({ name, body }),
-  application: (left, right) => ({ left, right })
-})
+export const parse = <T, E>({
+  left,
+  right
+}: PurescriptEither<string, Term<T>, E>) => (input: string) => {
+  try {
+    const parser = new Parser(grammar)
 
-console.log(result)
+    parser.feed(input)
+
+    const result = parser.results[0]
+
+    return right(result)
+  } catch (err) {
+    return left(err.message)
+  }
+}

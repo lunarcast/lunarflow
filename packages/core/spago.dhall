@@ -6,7 +6,6 @@
   , "debugged"
   , "generics-rep"
   , "ordered-collections"
-  , "parsing"
   , "profunctor-lenses"
   , "psci-support"
   , "record"

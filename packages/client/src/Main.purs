@@ -37,7 +37,6 @@ import Lunarflow.Renderer.Canvas (fillScreen, fitIntoBounds, onResize)
 import Lunarflow.Renderer.Constants (colors)
 import Lunarflow.Renderer.WithHeight (withHeights)
 import Partial.Unsafe (unsafeCrashWith)
-import Text.Parsing.Parser (ParseError)
 
 -- | The state which the concur widget keeps track of.
 type State
@@ -60,7 +59,7 @@ data Action
 
 -- | Possible errors which can occur while generating the geometry.
 data Error
-  = ParsingError ParseError
+  = ParsingError String
   | LayoutCreationError (ErrorStack String LayoutError)
 
 -- | This takes a lambda calculus expression and tries to build an unscoped layout out of it.
@@ -211,4 +210,6 @@ main = do
 derive instance genericError :: Generic Error _
 
 instance showError :: Show Error where
-  show = genericShow
+  show a = case a of
+    ParsingError err -> err
+    _ -> genericShow a
