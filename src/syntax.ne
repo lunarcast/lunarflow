@@ -19,7 +19,6 @@ no_lambda_application
     |  no_lambda_application __ atom
         {% ([left, _, right]) => call(left, right) %}
 
-
 atom
     -> "(" _ expression _ ")" {% d => d[2] %}
     |   variable {% id %} 

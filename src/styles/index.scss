@@ -1,5 +1,9 @@
-$bg: #1a1730;
-$bg-darker: #241b2f;
+@use "editor";
+@use "theme";
+
+* {
+  box-sizing: border-box;
+}
 
 html,
 body {
@@ -12,28 +16,9 @@ body {
   overflow: hidden;
 }
 
-canvas {
-  background: $bg;
-}
-
 #root {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  background: $bg-darker;
-  display: flex;
-}
+  height: 100%;
+  width: 100%;
 
-#root > * {
-  margin-right: 0.3rem;
-}
-
-#root > #error {
-  color: #ff4444;
-  white-space: pre-wrap;
-}
-
-#root #input,
-#root button {
-  font-size: 2rem;
+  background: theme.$bg;
 }
