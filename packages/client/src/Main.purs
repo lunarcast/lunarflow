@@ -20,11 +20,11 @@ import Data.Nullable as Nullable
 import Data.Tuple (Tuple(..), snd)
 import Effect (Effect)
 import Effect.Class (liftEffect)
-import Effect.Console as Console
 import Effect.Ref as Ref
-import Graphics.Canvas (CanvasElement, Context2D, getCanvasElementById, getContext2D, restore, save)
+import Graphics.Canvas (CanvasElement, Context2D, restore, save)
 import Lunarflow.Ast (withDebrujinIndices)
 import Lunarflow.Ast.Grouped (groupExpression)
+import Lunarflow.Component.Editor (editor)
 import Lunarflow.ErrorStack (ErrorStack)
 import Lunarflow.Function ((|>))
 import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
@@ -33,10 +33,9 @@ import Lunarflow.LayoutM (LayoutError, LayoutState, ScopeId(..), runLayoutMWithS
 import Lunarflow.Parser (parseLambdaCalculus)
 import Lunarflow.Reduction (tryEtaReducing)
 import Lunarflow.Render (render, runRenderM)
-import Lunarflow.Renderer.Canvas (fillScreen, fitIntoBounds, onResize)
+import Lunarflow.Renderer.Canvas (fillScreen, fitIntoBounds)
 import Lunarflow.Renderer.Constants (colors)
 import Lunarflow.Renderer.WithHeight (withHeights)
-import Partial.Unsafe (unsafeCrashWith)
 
 -- | The state which the concur widget keeps track of.
 type State
@@ -180,31 +179,7 @@ initialExpression :: String
 initialExpression = """\f a b. f b a"""
 
 main :: Effect Unit
-main = do
-  maybeCanvas <- getCanvasElementById "canvas"
-  case maybeCanvas of
-    Nothing -> Console.log "No canvas found"
-    Just canvas -> do
-      ctx <- getContext2D canvas
-      let
-        layoutWithState =
-          mkScopedLayout initialExpression
-            |> either (show >>> unsafeCrashWith) identity
-
-        geometry =
-          mkGeometry layoutWithState
-            |> either (show >>> unsafeCrashWith) identity
-      ref <- Ref.new geometry
-      let
-        runApp = app ref canvas ctx
-      onResize runApp
-      runApp
-      runWidgetInDom "root"
-        $ textBox { ref, render: runApp }
-            { value: initialExpression
-            , error: Nothing
-            , layout: Just layoutWithState
-            }
+main = runWidgetInDom "root" editor
 
 ---------- Tyeclass instances
 derive instance genericError :: Generic Error _

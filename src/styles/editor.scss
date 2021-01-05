@@ -1,0 +1,99 @@
+@use "theme";
+
+.editor {
+  display: grid;
+
+  height: 100%;
+  width: 100%;
+
+  padding: theme.$spacing * 2;
+  padding-top: theme.$spacing * 3;
+  padding-bottom: theme.$spacing * 3;
+
+  grid-template-columns: 1fr 2fr;
+  grid-template-rows: 4fr 1.4fr;
+
+  row-gap: theme.$spacing / 1.3;
+  column-gap: theme.$spacing / 1.3;
+}
+
+.editor__expression,
+.editor__reduction,
+.editor__visualization {
+  background: theme.$bg;
+  filter: brightness(1.3);
+}
+
+.editor__visualization {
+  height: 100%;
+  width: 100%;
+}
+
+.editor__expression {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+}
+
+.expression,
+.expression__text {
+  transition: background 0.2s;
+}
+
+.expression,
+.expression__container {
+  cursor: pointer;
+}
+
+.expression__container {
+  $margin-y: theme.$spacing / 2;
+  $padding-y: theme.$spacing / 2.3;
+
+  padding: theme.$spacing / 1.5;
+  padding-top: $padding-y;
+  padding-bottom: $padding-y;
+
+  margin-top: $margin-y;
+  margin-bottom: $margin-y;
+}
+
+.expression__top {
+  margin-bottom: 1rem;
+}
+
+.expression__name {
+  color: theme.$on-bg;
+
+  text-transform: capitalize;
+  font-family: Roboto;
+  font-size: 1.3rem;
+
+  cursor: default;
+}
+
+.expression__text {
+  $padding-y: 0.5rem;
+
+  background: theme.$bg-lighter;
+  color: #deee93;
+
+  font-family: "Source code pro";
+  font-size: 1.3rem;
+  letter-spacing: 2px;
+
+  padding: 1rem;
+  padding-top: $padding-y;
+  padding-bottom: $padding-y;
+}
+
+.expression.expression--selected {
+  background: theme.$bg-lighter;
+}
+
+// .expression.expression--selected > .expression__container {
+//   margin-top: 0;
+// }
+
+.expression.expression--selected > .expression__container > .expression__text {
+  background: theme.$bg;
+}
