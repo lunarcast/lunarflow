@@ -5,7 +5,7 @@ module Lunarflow.Layout
   , Layout
   , LayoutLikeF
   , LayoutLike
-  , addIndices
+  , generateLayout
   , unscopeLayout
   , markRoot
   , shiftLines
@@ -13,48 +13,49 @@ module Lunarflow.Layout
 
 import Prelude
 import Control.MonadZero (guard)
+import Data.Array as Array
+import Data.Bifunctor (lmap)
 import Data.Function (on)
+import Data.Lens (over)
+import Data.Lens.Record (prop)
 import Data.List as List
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Ord (abs)
 import Data.Set as Set
+import Data.Symbol (SProxy(..))
 import Data.Traversable (for, minimumBy)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
-import Lunarflow.Ast (AstF(..), call, lambda, var)
-import Lunarflow.Ast.Grouped (GroupedExpression, references)
+import Data.Typelevel.Undefined (undefined)
+import Lunarflow.Ast (AstF(..), Name(..), call, lambda, var)
+import Lunarflow.Ast.Grouped (GroupedLike, GroupedLikeF, references)
 import Lunarflow.ErrorStack (ErrorStack(..))
-import Lunarflow.Function ((|>))
-import Lunarflow.LayoutM (LayoutM, Line, Position(..), ScopeId(..), while, currentScope, freshColor, getBinder, getIndexMap, missingPosition, unscopePosition)
+import Lunarflow.Function (Endomorphism, (|>))
+import Lunarflow.LayoutM (AbsolutePosition, LayoutM, Line, LineRep, Position(..), PositionPointer(..), ScopeId(..), currentScope, freshColor, getBinder, getIndexMap, getVarPosition, missingPosition, unscopePosition, while)
 import Lunarflow.List (indexed)
 import Lunarflow.Mu (Mu)
-import Matryoshka (cata, para, project)
+import Matryoshka (cata, cataM, embed, para, project)
+import Prim.Row as Row
+import Record as Record
 import Run.Except (note)
 import Run.Reader (ask, local)
 import Run.State (get, modify, put)
 
----------- Type
+---------- Types
+-- | Different ways positions can be placed in
+data VarPosition p
+  = ScopeShift { from :: ScopeId, to :: p }
+
+-- We define this type to clean up the definition of generateLayout
 -- | The base functor for all layouts
 type LayoutLikeF p v c a l
-  = AstF (Line p ( index :: Int | v )) (Line p c)
-      ( Line
-          p
-          ( args :: List.List (Line p a)
-          , isRoot :: Boolean
-          | l
-          )
-      )
+  = GroupedLikeF (LineRep p v) (Line p c) (Line p a) (LineRep p l)
 
 -- | General type for all layouts
 type LayoutLike p v c a l
   = Mu (LayoutLikeF p v c a l)
-
--- | The base functor for scoped layouts.
-type ScopedLayoutF
-  = LayoutLikeF Position () () ()
-      ( scope :: ScopeId
-      )
 
 -- | The base functor for layouts.
 type LayoutF
@@ -63,6 +64,13 @@ type LayoutF
 -- | Layouts are expressions which have vertical indices for every line.
 type Layout
   = Mu LayoutF
+
+-- | The base functor for scoped layouts.
+type ScopedLayoutF
+  = LayoutLikeF Position () () ()
+      ( scope :: ScopeId
+      , isRoot :: Boolean
+      )
 
 -- | Layouts are expressions which have vertical indices for every line.
 -- | This is the scoped variant, which keeps track of what scope everything is from.
@@ -77,30 +85,47 @@ data LocationConstraint
 
 -- | Actions we can take in order to place an expression.
 data LocationSearchResult
-  = At Int
+  = At PositionPointer
   | NextTo Int
 
 ---------- Layout generation
+introduceScopes ::
+  forall v c a l.
+  Row.Lacks "scope" l =>
+  GroupedLike v c a l ->
+  LayoutM (GroupedLike v c a ( scope :: ScopeId | l ))
+introduceScopes =
+  cataM case _ of
+    Var data' -> pure $ var data'
+    Call data' function argument -> pure $ call data' function argument
+    Lambda data' body -> ado
+      scope <- newScope
+      in lambda (Record.insert _scope scope data') body
+
 -- | Generate a layout from an ast.
-addIndices :: GroupedExpression -> LayoutM ScopedLayout
-addIndices =
+generateLayout ::
+  forall v c a l.
+  Row.Lacks "args" l =>
+  GroupedLike v (Record c) (Record a) ( scope :: ScopeId | l ) ->
+  LayoutM (LayoutLike Position v c a ( scope :: ScopeId | l ))
+generateLayout =
   para case _ of
-    Var { index } ->
+    Var data'@{ name: Bound name } ->
       while "adding indices to a variable" ado
-        { position, color } <- getBinder index
-        in var { index, position, color }
-    Call _ (Tuple _ layoutFunction) (Tuple groupedArgument layoutArgument) ->
+        { position, color } <- getBinder name
+        in var $ Record.union { position, color } data'
+    Var { name: Free index } -> while "adding indices to a free variable" undefined
+    Call data' (Tuple _ layoutFunction) (Tuple groupedArgument layoutArgument) ->
       while "adding indices to a call" do
         let
           -- This type annotation is here so the compiler
           -- knows which Unfoldable instance to use.
-          vars :: Array _
+          vars :: Array Name
           vars = Set.toUnfoldable $ references groupedArgument
         -- This holds all the variables referenced inside the argument of the call
-        inArgument <- Set.fromFoldable <$> for vars (getBinder >>> map _.position)
+        inArgument <- Set.fromFoldable <$> for (onlyBound vars) (getBinder >>> map _.position)
         -- When we draw a call, we draw the function first and then the argument.
         -- We don't want the space taken by the variables in the argument to be occupied
-        -- by stuff while drawing the function.
         -- So we basically inform the call not to touch those spaces.
         function <- protect inArgument layoutFunction
         scope <- currentScope
@@ -110,63 +135,78 @@ addIndices =
           -- PureScript doesn't genralize let bindings 
           -- so we have to write this type definition ourselves.
           nearFunction :: LayoutM ~> LayoutM
-          nearFunction m = if functionScope == scope then attractTo functionIndex m else m
+          nearFunction
+            | functionScope == scope = attractTo functionIndex
+            | otherwise = identity
         argument <- protect (Set.singleton functionPosition) $ nearFunction layoutArgument
         let
           argumentPosition = getPosition argument
 
           except = Set.fromFoldable [ functionPosition, argumentPosition ]
         constraint <- constrain functionPosition argumentPosition
-        position <- nearFunction $ ask <#> _.near >>= placeExpression except constraint
-        pure $ call { position, color: getColor function } function argument
-    Lambda { args: vars } (Tuple groupedBody layoutBody) ->
+        position <- nearFunction $ ask <#> _.near >>= placeExpression { except, constraint }
+        let
+          data'' = Record.union { position, color: getColor function } data'
+        pure $ call data'' function argument
+    expression@(Lambda data'@{ args: vars } (Tuple _ layoutBody)) ->
       while "adding indices to a lambda" do
+        -- Each lambda has it's own scope so we generate a new one
         scope <- newScope
-        args <-
-          forWithIndex vars \index name -> ado
+        -- Generate colors and positions for the arguments
+        (args :: _ (Line Position a)) <-
+          forWithIndex vars \index argument -> ado
             color <- freshColor
-            in { position: Position (varCount - index - 1) scope, color }
-        initialState <- get
-        put initialState { indexMap = Map.insert scope newList initialState.indexMap }
+            in Record.union { position: Position (PositionPointer $ varCount - index - 1) scope, color } argument
+        -- Add the new scope to the index map
+        modify $ over (prop _indexMap) $ Map.insert scope positionMemory
+        -- TODO: create helper for 'flip local'
         body <-
           flip local layoutBody \ctx ->
             ctx
-              { binders = args <> ctx.binders
-              , near = 0
+              { binders = (args <#> \{ position, color } -> { position, color }) <> ctx.binders -- introduce the argumens into scope
+              , near = PositionPointer $ (varCount - 1) / 2 -- Reset the attraction point to the middle
               , currentScope = scope
               }
         -- TODO: abstract this away.
         let
-          -- This type annotation is here so the compiler
-          -- knows which Unfoldable instance to use.
-          referenced :: Array _
-          referenced = Set.toUnfoldable $ references $ lambda { args: vars } groupedBody
+          referenced :: Array Name
+          referenced = Array.fromFoldable $ references $ embed $ fst <$> expression
         -- This holds all the variables referenced inside the body of the lambda
-        inBody <- Set.fromFoldable <$> for referenced (getBinder >>> map _.position)
-        position <- ask <#> _.near >>= placeExpression inBody Everywhere
-        pure $ lambda { position, args, scope, isRoot: false, color: getColor body } body
+        inBody <- Set.fromFoldable <$> for (onlyBound referenced) getVarPosition
+        -- The position to place the lambda (in the outer scope)
+        position <- ask <#> _.near >>= placeExpression { except: inBody, constraint: Everywhere }
+        pure $ flip lambda body
+          $ Record.union { position, color: getColor body, args }
+          $ Record.delete _args data'
       where
-      newList = List.range 0 (varCount - 1)
+      positionMemory = List.range 0 (varCount - 1)
 
       varCount = List.length vars
+  where
+  onlyBound :: Array Name -> Array Int
+  onlyBound =
+    Array.mapMaybe case _ of
+      Bound index -> Just index
+      Free _ -> Nothing
 
 -- | Search for the optimal location to put something at.
 findLocation ::
   { constraint :: LocationConstraint
-  , positionIndex :: Int
+  , positionIndex :: PositionPointer
   , positions :: List.List Int
-  , except :: Set.Set Int
+  , except :: Set.Set PositionPointer
   , scope :: ScopeId
   } ->
   LayoutM LocationSearchResult
 findLocation { constraint, positionIndex, positions, except, scope } = ado
   position <-
     while "finding a location"
-      $ note (Errored $ missingPosition positions scope positionIndex)
-      $ List.index positions positionIndex
+      $ note (Errored $ missingPosition positions (Position positionIndex scope))
+      $ List.index positions
+      $ unwrap positionIndex
   -- 
   let
-    allowed :: Int -> Boolean
+    allowed :: PositionPointer -> Boolean
     allowed x = not $ Set.member x except
 
     passesConstraint :: Int -> Boolean
@@ -176,10 +216,11 @@ findLocation { constraint, positionIndex, positions, except, scope } = ado
       Below -> x < position
 
     -- | If an optimal existing spot exists, this finds it.
-    unused :: Maybe Int
+    unused :: Maybe PositionPointer
     unused =
       positions
         |> indexed
+        |> map (lmap PositionPointer)
         |> List.filter (snd >>> passesConstraint)
         |> List.filter (fst >>> allowed)
         |> map (map distanceToPosition)
@@ -196,8 +237,13 @@ in case unused of
         _ -> position
 
 -- | Gets the position of an expression and a constraint and places it somewhere.
-placeExpression :: Set.Set Position -> LocationConstraint -> Int -> LayoutM Position
-placeExpression except constraint positionIndex = do
+placeExpression ::
+  { except :: Set.Set Position
+  , constraint :: LocationConstraint
+  } ->
+  PositionPointer ->
+  LayoutM Position
+placeExpression { except, constraint } positionIndex = do
   ctx <- ask
   positions <- currentIndexList
   result <-
@@ -207,10 +253,10 @@ placeExpression except constraint positionIndex = do
       , positions
       , scope: ctx.currentScope
       , except:
-        (ctx.protected <> except)
-          |> Set.mapMaybe \(Position index scope) -> do
-              guard (scope == ctx.currentScope)
-              Just index
+          (ctx.protected <> except)
+            |> Set.mapMaybe \(Position index scope) -> do
+                guard (scope == ctx.currentScope)
+                Just index
       }
   case result of
     At index -> pure $ Position index ctx.currentScope
@@ -233,7 +279,7 @@ createPosition position scope = do
           state.indexMap
       }
   list <- getIndexMap scope
-  pure $ Position (List.length list - 1) scope
+  pure $ Position (PositionPointer $ List.length list - 1) scope
 
 ---------- Converstion functions
 -- | Transform a scoped layout into an unscoped one.
@@ -272,6 +318,7 @@ shiftLines scope { past, amount } =
           state.indexMap
       }
   where
+  update :: Endomorphism AbsolutePosition
   update x
     | x > past = x + amount
     | otherwise = x
@@ -290,18 +337,18 @@ protect :: Set.Set Position -> LayoutM ~> LayoutM
 protect inputs = local (\a -> a { protected = a.protected <> inputs })
 
 -- | Run a computation in a context "attracted" to an arbitrary position.
-attractTo :: Int -> LayoutM ~> LayoutM
+attractTo :: PositionPointer -> LayoutM ~> LayoutM
 attractTo near = local (_ { near = near })
 
 -- | Get the position an expression already has.
-getPosition :: ScopedLayout -> Position
+getPosition :: forall p v c a l. LayoutLike p v c a l -> p
 getPosition layout = case project layout of
   Var { position } -> position
   Call { position } _ _ -> position
   Lambda { position } _ -> position
 
 -- | Get the color of any scoped layout.
-getColor :: ScopedLayout -> String
+getColor :: forall p v c a l. LayoutLike p v c a l -> String
 getColor layout = case project layout of
   Var { color } -> color
   Call { color } _ _ -> color
@@ -338,3 +385,13 @@ constrain functionPosition@(Position _ functionScope) argumentPosition@(Position
         Below
       else
         Above
+
+---------- SProxies
+_indexMap :: SProxy "indexMap"
+_indexMap = SProxy
+
+_scope :: SProxy "scope"
+_scope = SProxy
+
+_args :: SProxy "args"
+_args = SProxy

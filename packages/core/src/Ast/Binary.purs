@@ -6,7 +6,7 @@ import Data.ArrayBuffer.Types (ArrayBuffer)
 import Data.List (List, foldr, snoc, (:))
 import Data.List as List
 import Data.Unfoldable (replicate)
-import Lunarflow.Ast (AstF(..), DeBrujinLike)
+import Lunarflow.Ast (AstF(..), DeBrujinLike, Name(..))
 import Lunarflow.Ast.Grouped (GroupedLike)
 import Matryoshka (cata)
 
@@ -23,7 +23,7 @@ showBinaryAst ast = foldr go "" ast.bits
   go bit = append if bit then "1" else "0"
 
 -- | Convert an ast using de brujin indices to binary.
-indexedToBinary :: forall v c l. DeBrujinLike v c l -> BinaryAst
+indexedToBinary :: forall v c l. Partial => DeBrujinLike v c l -> BinaryAst
 indexedToBinary =
   cata case _ of
     Lambda _ body ->
@@ -35,7 +35,7 @@ indexedToBinary =
       -- TODO: this is inefficient, stop doing it 
       , bits: false : true : m.bits <> n.bits
       }
-    Var { index } ->
+    Var { name: Bound index } ->
       { size: index + 2
       , bits: snoc (replicate (index + 1) true) false
       }
@@ -54,7 +54,7 @@ indexedToBinary =
 -- |  3       6      5
 -- |  4       8      6
 -- |  n      2n    n + 2   
-groupedToBinary :: forall v c a l. GroupedLike v c a l -> BinaryAst
+groupedToBinary :: forall v c a l. Partial => GroupedLike v c a l -> BinaryAst
 groupedToBinary =
   cata case _ of
     Lambda { args } body ->
@@ -71,7 +71,7 @@ groupedToBinary =
       { size: 2 + n.size + m.size
       , bits: false : true : n.bits <> m.bits
       }
-    Var { index } ->
+    Var { name: Bound index } ->
       { size: index + 2
       , bits: snoc (replicate (index + 1) true) false
       }

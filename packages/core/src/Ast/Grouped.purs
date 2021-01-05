@@ -1,4 +1,14 @@
-module Lunarflow.Ast.Grouped where
+module Lunarflow.Ast.Grouped
+  ( GroupedLikeF
+  , GroupedLike
+  , GroupedExpression
+  , _args
+  , groupExpression
+  , ungroupExpression
+  , references
+  , contains
+  , shift
+  ) where
 
 import Prelude
 import Data.List (foldr)
@@ -6,22 +16,27 @@ import Data.List as List
 import Data.Maybe (Maybe(..))
 import Data.Set as Set
 import Data.Symbol (SProxy(..))
-import Lunarflow.Ast (AstF(..), DeBrujinLike, call, lambda, var)
+import Lunarflow.Ast (AstF(..), DeBrujinLike, Name(..), DeBrujinLikeF, call, lambda, shiftIndex, var)
 import Lunarflow.Function (Endomorphism)
+import Lunarflow.Mu (Mu)
 import Matryoshka (cata, project)
 import Prim.Row as Row
 import Record as Record
 
 -- TODO: Make the argument list nonempty.
+-- | Base functor for grouped expressions
+type GroupedLikeF v c a l
+  = DeBrujinLikeF v c { args :: List.List a | l }
+
 -- | A chunk of lambda calculus ast which has itconsecutive lambdas gruoped.
 type GroupedLike v c a l
-  = DeBrujinLike v c { args :: List.List a | l }
+  = Mu (GroupedLikeF v c a l)
 
 -- | Grouped expressions merge consecutive lambdas into groups.
 type GroupedExpression
   = GroupedLike () Unit String ()
 
--- | Typelevel strnig for the field the arg list is stored in
+-- | Typelevel string for the field the arg list is stored in
 _args :: SProxy "args"
 _args = SProxy
 
@@ -36,7 +51,9 @@ groupExpression =
       _ -> lambda { args: List.singleton name } body
 
 -- | Split all the lambdas from groups.
-ungroupExpression :: forall v c a l r. Row.Lacks "args" l => (a -> Record l -> r) -> GroupedLike v c a l -> DeBrujinLike v c r
+ungroupExpression ::
+  forall v c a l r.
+  Row.Lacks "args" l => (a -> Record l -> r) -> GroupedLike v c a l -> DeBrujinLike v c r
 ungroupExpression f =
   cata case _ of
     Call data' a b -> call data' a b
@@ -50,39 +67,38 @@ ungroupExpression f =
       rest = Record.delete _args data'
 
 -- | Find all referenced vars inside an expression.
-references :: GroupedExpression -> Set.Set Int
+references :: forall v c a l. GroupedLike v c a l -> Set.Set Name
 references =
   cata case _ of
     Call _ function argument -> function `Set.union` argument
-    Var { index } -> Set.singleton index
+    Var { name } -> Set.singleton name
     Lambda { args: vars } body -> Set.mapMaybe mapVar body
       where
-      mapVar :: Int -> Maybe Int
-      mapVar a
-        | a < varCount = Nothing
-        | otherwise = Just (a - varCount)
+      mapVar :: Name -> Maybe Name
+      mapVar = case _ of
+        Bound index
+          | index < varCount -> Nothing
+          | otherwise -> Just $ Bound $ index - varCount
+        free -> Just free
 
       varCount = List.length vars
 
 -- | Check if a grouped expression references a var.
-contains :: forall v l a c. Int -> GroupedLike v l a c -> Boolean
+contains :: forall v l a c. Name -> GroupedLike v l a c -> Boolean
 contains = flip $ cata algebra
   where
-  algebra = case _ of
-    Var { index } -> \var -> index == var
-    Call _ f a -> \i -> f i || a i
-    Lambda { args } body -> \i -> body (i + List.length args)
+  algebra expression name = case expression of
+    Var data' -> data'.name == name
+    Call _ f a -> f name || a name
+    Lambda { args } body -> body $ shiftIndex (List.length args) name
 
 -- | Shift all the variables in an expression by an arbitrary amount
 shift :: forall v l a c. Int -> Int -> Endomorphism (GroupedLike v l a c)
 shift initialPast amount = flip (cata algebra) initialPast
   where
-  algebra = case _ of
-    Var data' -> \past ->
-      var
-        if data'.index > past then
-          data' { index = data'.index + amount }
-        else
-          data'
-    Call data' function argument -> \past -> call data' (function past) (argument past)
-    Lambda data' body -> \past -> lambda data' $ body (List.length data'.args + past)
+  algebra expression past = case expression of
+    Var data'@{ name: Bound index }
+      | index > past -> var data' { name = Bound $ index + amount }
+    Var data' -> var data'
+    Call data' function argument -> call data' (function past) (argument past)
+    Lambda data' body -> lambda data' $ body (List.length data'.args + past)
