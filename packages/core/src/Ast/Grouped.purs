@@ -10,16 +10,10 @@ module Lunarflow.Ast.Grouped
   , shift
   ) where
 
-import Prelude
-import Data.List (foldr)
+import Lunarlude
 import Data.List as List
-import Data.Maybe (Maybe(..))
 import Data.Set as Set
-import Data.Symbol (SProxy(..))
 import Lunarflow.Ast (AstF(..), DeBrujinLike, Name(..), DeBrujinLikeF, call, lambda, shiftIndex, var)
-import Lunarflow.Function (Endomorphism)
-import Lunarflow.Mu (Mu)
-import Matryoshka (cata, project)
 import Prim.Row as Row
 import Record as Record
 

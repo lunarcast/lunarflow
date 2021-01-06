@@ -17,18 +17,9 @@ module Lunarflow.Ast
   , shiftIndex
   ) where
 
-import Prelude
+import Lunarlude
 import Control.Monad.Reader (Reader, asks, local, runReader)
-import Data.Debug (class Debug, genericDebug)
-import Data.Generic.Rep (class Generic)
-import Data.Generic.Rep.Show (genericShow)
 import Data.List as List
-import Data.Maybe (Maybe(..))
-import Data.Traversable (class Foldable, class Traversable)
-import Data.Tuple (Tuple(..))
-import Lunarflow.Function (Endomorphism)
-import Lunarflow.Mu (Mu, TacitRepr)
-import Matryoshka (class Corecursive, Algebra, cata, embed, para, project)
 
 -- | The meat and potatoes of representing an expression.
 -- |
@@ -187,5 +178,5 @@ derive instance eqName :: Eq Name
 derive instance ordName :: Ord Name
 
 instance showName :: Show Name where
-  show (Bound i) = "~" <> show i
+  show (Bound i) = show i
   show (Free name) = name

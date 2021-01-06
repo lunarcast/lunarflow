@@ -26,17 +26,12 @@ module Lunarflow.LayoutM
   , getVarPosition
   ) where
 
-import Prelude
+import Lunarlude
 import Data.Array as Array
-import Data.Debug (class Debug, genericDebug)
-import Data.Generic.Rep (class Generic)
 import Data.List as List
 import Data.List.Lazy as LazyList
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
-import Data.Newtype (class Newtype)
 import Data.Set as Set
-import Data.Tuple (Tuple)
 import Lunarflow.ErrorStack (EXCEPT_STACKED, EitherStacked, throw)
 import Lunarflow.ErrorStack as Stacked
 import Run (Run, expand, extract)

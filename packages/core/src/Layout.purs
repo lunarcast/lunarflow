@@ -11,32 +11,19 @@ module Lunarflow.Layout
   , shiftLines
   ) where
 
-import Prelude
-import Control.MonadZero (guard)
+import Lunarlude
 import Data.Array as Array
-import Data.Bifunctor (lmap)
-import Data.Function (on)
 import Data.Lens (over)
 import Data.Lens.Record (prop)
 import Data.List as List
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
-import Data.Ord (abs)
 import Data.Set as Set
-import Data.Symbol (SProxy(..))
-import Data.Traversable (for, minimumBy)
-import Data.TraversableWithIndex (forWithIndex)
-import Data.Tuple (Tuple(..), fst, snd)
 import Data.Typelevel.Undefined (undefined)
 import Lunarflow.Ast (AstF(..), Name(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (GroupedLike, GroupedLikeF, references)
 import Lunarflow.ErrorStack (ErrorStack(..))
-import Lunarflow.Function (Endomorphism, (|>))
 import Lunarflow.LayoutM (AbsolutePosition, LayoutM, Line, LineRep, Position(..), PositionPointer(..), ScopeId(..), currentScope, freshColor, getBinder, getIndexMap, getVarPosition, missingPosition, unscopePosition, while)
 import Lunarflow.List (indexed)
-import Lunarflow.Mu (Mu)
-import Matryoshka (cata, cataM, embed, para, project)
 import Prim.Row as Row
 import Record as Record
 import Run.Except (note)

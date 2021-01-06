@@ -1,27 +1,19 @@
 -- TODO: Document this
 module Lunarflow.Render where
 
-import Prelude
-import Control.MonadZero (guard)
+import Lunarlude
 import Data.Array as Arary
 import Data.Array as Array
-import Data.FoldableWithIndex (foldrWithIndex)
-import Data.Int (floor, toNumber)
 import Data.List as List
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Ord (abs)
-import Data.Traversable (sum)
-import Data.Tuple (Tuple(..))
 import Data.Typelevel.Num (d0, d1)
 import Data.Vec (vec2, (!!))
-import Lunarflow.Ast (AstF(..))
+import Effect.Exception.Unsafe (unsafeThrow)
+import Lunarflow.Ast (AstF(..), Name(..))
 import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
-import Lunarflow.Function ((|>))
 import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, callCircleColor, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
-import Lunarflow.Renderer.WithHeight (YLayout, YLayoutF, YMeasures)
+import Lunarflow.Renderer.WithHeight (YLayoutLike, YLayoutLikeF, YMeasures, totalHeight)
 import Lunarflow.Vector as Vector
-import Matryoshka (Algebra, cata)
 import Run (Run, extract)
 import Run.Reader (READER, ask, local, runReader)
 
@@ -47,14 +39,41 @@ type RenderList
 
 -- TODO: error handling
 -- | Renders a layout using the Render monad.
-render :: Tuple YLayout YMeasures -> RenderM Shape.Shape
-render (Tuple layout rootMeasures) =
+render :: forall v c a l. Tuple YMeasures (YLayoutLike v c a l) -> RenderM Shape.Shape
+render (Tuple rootMeasures layout) =
   layout
     |> cata algebra
     |> local (_ { slices = [ rootMeasures ] })
     |> map ((\{ shapes, overlays } -> shapes <> overlays) >>> Shape.fromFoldable)
   where
-  algebra :: Algebra YLayoutF (RenderM RenderList)
+  algebra :: Algebra (YLayoutLikeF v c a l) (RenderM RenderList)
+  algebra (Var { position, name: Bound index, color }) = do
+    { xStart, slices } <- ask
+    yOffset <- getYOffset index
+    start <- getStart index
+    let
+      y = yOffset + linePadding + getY index position 1 slices
+
+      width = max lineWidth (xStart - start)
+    pure
+      { color
+      , lineY: y
+      , maxX: start + width
+      , overlays: []
+      , shapes:
+          [ Shape.rect
+              { fill: color
+              }
+              { x: start
+              , y
+              , height: lineHeight
+              , width: width
+              }
+          ]
+      }
+
+  algebra (Var _) = unsafeThrow "Cannot render free variables yet"
+
   algebra (Lambda data'@{ args, heights, position, isRoot } body) = do
     xStart <- ask <#> _.xStart
     slices <- ask <#> _.slices
@@ -63,7 +82,7 @@ render (Tuple layout rootMeasures) =
     let
       argCount = List.length args
 
-      updatedYOffset = yOffset + getY 0 position (sum heights) slices
+      updatedYOffset = yOffset + getY 0 position (totalHeight heights) slices
     --
     bodyRenderList <-
       local
@@ -77,7 +96,7 @@ render (Tuple layout rootMeasures) =
     --
     let
       height :: Int
-      height = (sum heights) * unitHeight
+      height = (totalHeight heights) * unitHeight
 
       lineY :: Int
       lineY
@@ -118,31 +137,6 @@ render (Tuple layout rootMeasures) =
         , starts = Array.replicate argCount start <> ctx.starts
         }
 
-  algebra (Var { position, index, color }) = do
-    { xStart, slices } <- ask
-    yOffset <- getYOffset index
-    start <- getStart index
-    let
-      y = yOffset + linePadding + getY index position 1 slices
-
-      width = max lineWidth (xStart - start)
-    pure
-      { color
-      , lineY: y
-      , maxX: start + width
-      , overlays: []
-      , shapes:
-        [ Shape.rect
-            { fill: color
-            }
-            { x: start
-            , y
-            , height: lineHeight
-            , width: width
-            }
-        ]
-      }
-
   algebra (Call { position } mkFunc mkArg) = do
     -- Get stuff from the environment
     slices <- ask <#> _.slices
@@ -176,10 +170,10 @@ render (Tuple layout rootMeasures) =
           , x: argument.maxX
           , y0: argument.lineY
           , y1:
-            if not sameDirection then
-              function.lineY
-            else
-              if up then middleY - diagonalHeight else middleY
+              if not sameDirection then
+                function.lineY
+              else
+                if up then middleY - diagonalHeight else middleY
           }
 
       continuationWidth :: Int
@@ -213,10 +207,10 @@ render (Tuple layout rootMeasures) =
           , diagonalWidth: lineHeight
           , x: diagonal.x1 + diagonal.delta !! d0
           , y0:
-            if not sameDirection then
-              function.lineY
-            else
-              if up then middleY else middleY - diagonalHeight
+              if not sameDirection then
+                function.lineY
+              else
+                if up then middleY else middleY - diagonalHeight
           , y1: lineY
           }
 
@@ -293,7 +287,8 @@ getY index position height slices = unitHeight * units + unitHeight / 2 * (left 
           GT -> Tuple (heightResult + height') availibleResult
       )
       (Tuple 0 1)
-      $ fromMaybe []
+      $ unwrap
+      $ fromMaybe mempty
       $ Array.index slices index
 
 mkDiagonal ::

@@ -1,7 +1,7 @@
 module Lunarflow.Parser where
 
-import Prelude
-import Data.Either (Either(..), fromRight)
+import Lunarlude
+import Data.Either (fromRight)
 import Data.Function.Uncurried (Fn2, mkFn2)
 import Lunarflow.Ast (RawExpression, call, lambda, var)
 import Partial.Unsafe (unsafePartial)

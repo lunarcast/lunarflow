@@ -1,86 +1,91 @@
 module Lunarflow.Renderer.WithHeight
-  ( YLayoutF
-  , YLayout
+  ( YLayoutLikeF
+  , YLayoutLike
   , YMeasures
   , withHeights
-  , getPosition
+  , totalHeight
   ) where
 
-import Prelude
-import Data.Array (foldr)
+import Lunarlude
 import Data.Array as Array
-import Data.Foldable (sum)
-import Data.Symbol (SProxy(..))
-import Data.Tuple (Tuple(..), uncurry)
 import Lunarflow.Array (maxZip)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
-import Lunarflow.Label (class Label)
-import Lunarflow.Layout (Layout, LayoutF, LayoutLikeF)
+import Lunarflow.Layout (LayoutLike, LayoutLikeF)
 import Lunarflow.LayoutM (ScopeId)
-import Lunarflow.Mu (Mu)
-import Matryoshka (Algebra, cata, project)
+import Prim.Row as Row
 import Record as Record
 
 -- | The base functor for YLayouts.
-type YLayoutF
-  = LayoutLikeF Int () () () ( heights :: YMeasures, scope :: ScopeId )
+type YLayoutLikeF v c a l
+  = LayoutLikeF Int v c a ( isRoot :: Boolean, scope :: ScopeId, heights :: YMeasures | l )
 
 -- | YLayouts are layouts which keep track of the maximum height of each line
-type YLayout
-  = Mu YLayoutF
+type YLayoutLike v c a l
+  = Mu (YLayoutLikeF v c a l)
 
--- TODO: make this a newtype with semigruop (& monoid?) instances
--- | A slice is just an array where each element 
--- | represents the height of the line at the same (local) y index
-type YMeasures
-  = Array Int
+-- | An array which holds the max size of each row.
+-- | 
+-- | Eg: [1, 2, 3] means we have 
+-- |    a row of height 1, 
+-- |    above a row of height 2, 
+-- |    above a row of height 3 
+-- | 
+-- | The reason we made a newtype for this is the custom Semigroup instance.
+newtype YMeasures
+  = YMeasures (Array Int)
 
 -- | Add height data to a layout.
 withHeights ::
-  Layout ->
-  Tuple YLayout YMeasures
-withHeights = cata algebra
-  where
-  algebra :: Algebra LayoutF (Tuple YLayout YMeasures)
-  algebra = case _ of
-    Lambda data' (Tuple body rawHeights) -> Tuple yLambda measures
-      where
-      heights =
-        mergeArrays rawHeights
-          $ foldr mergeArrays []
-          $ data'.args
-          <#> \x -> createArray x.position 1 []
-
-      measures = createArray data'.position (sum heights + 1) []
-
-      yLambda =
-        lambda
-          (Record.insert (SProxy :: _ "heights") heights data')
-          body
-    Var { index, position, color } -> Tuple yVar yMap
-      where
-      yVar = var { index, color, position }
-
-      yMap = []
-    Call data' (Tuple function functionMeasures) (Tuple argument argumentMeasures) -> Tuple yCall measures
+  forall v l a c.
+  Row.Lacks "heights" l =>
+  -- TODO: clean this up
+  LayoutLike Int v c a ( isRoot :: Boolean, scope :: ScopeId | l ) ->
+  Tuple YMeasures (YLayoutLike v c a l)
+withHeights =
+  cata case _ of
+    -- The heights of vars will be handled inside the lambda which binds them
+    Var varData -> Tuple mempty $ var varData
+    -- To measure calls we just merge the measures of the function and argument and add one more row for the result.
+    Call data' (Tuple functionMeasures function) (Tuple argumentMeasures argument) -> Tuple measures yCall
       where
       yCall = call data' function argument
 
-      measures = createArray data'.position 1 $ mergeArrays functionMeasures argumentMeasures
+      measures =
+        createMeasure { position: data'.position, height: 1 } -- The row for the result
+          <> functionMeasures
+          <> argumentMeasures
+    Lambda lambdaData (Tuple nonVarMeasures body) ->
+      Tuple measures $ flip lambda body
+        $ Record.insert _heights bodyMeasures lambdaData
+      where
+      argumentMeasures =
+        lambdaData.args
+          <#> \{ position } -> createMeasure { position, height: 1 }
 
--- | Update an ymap at an arbitrary index, position and value.
-createArray :: (Label "position" => Int) -> (Label "value" => Int) -> YMeasures -> YMeasures
-createArray position value = mergeArrays $ Array.snoc (Array.replicate position 0) value
+      bodyMeasures = nonVarMeasures <> fold argumentMeasures
 
--- | Pretty much a semigroup implementation for YMeasures
-mergeArrays :: Array Int -> Array Int -> Array Int
-mergeArrays arr arr' = maxZip 0 0 arr arr' <#> uncurry max
+      measures =
+        createMeasure
+          { position: lambdaData.position
+          , height: totalHeight bodyMeasures + 1
+          }
 
--- | Get the position an YLayout is at.
-getPosition :: YLayout -> Int
-getPosition =
-  project
-    >>> case _ of
-        Var { position } -> position
-        Call { position } _ _ -> position
-        Lambda { position } _ -> position
+-- | Make a value of type YMeasures which holds a measure of an arbitrary height at an arbitrary position
+createMeasure :: { position :: Int, height :: Int } -> YMeasures
+createMeasure { position, height } = YMeasures $ Array.snoc (Array.replicate position 0) height
+
+-- | Measure the total height a bunch of rows will occupy
+totalHeight :: YMeasures -> Int
+totalHeight = unwrap >>> sum
+
+---------- Typeclass instances
+derive instance newtypeYMeasures :: Newtype YMeasures _
+
+instance semigroupYMeasures :: Semigroup YMeasures where
+  append (YMeasures arr) (YMeasures arr') = YMeasures $ maxZip 0 0 arr arr' <#> uncurry max
+
+derive newtype instance monoidYMeasures :: Monoid YMeasures
+
+---------- SProxies
+_heights :: SProxy "heights"
+_heights = SProxy

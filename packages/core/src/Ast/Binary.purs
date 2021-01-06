@@ -1,14 +1,12 @@
 module Lunarflow.Ast.Binary where
 
-import Prelude
+import Lunarlude
 import Data.Array as Array
 import Data.ArrayBuffer.Types (ArrayBuffer)
-import Data.List (List, foldr, snoc, (:))
+import Data.List (List, snoc, (:))
 import Data.List as List
-import Data.Unfoldable (replicate)
 import Lunarflow.Ast (AstF(..), DeBrujinLike, Name(..))
 import Lunarflow.Ast.Grouped (GroupedLike)
-import Matryoshka (cata)
 
 -- | Lambda calculus but represents using 0s and 1s.
 type BinaryAst

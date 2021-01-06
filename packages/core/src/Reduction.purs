@@ -4,17 +4,13 @@ module Lunarflow.Reduction
   ( tryEtaReducing
   ) where
 
-import Prelude
-import Data.Foldable (foldr)
+import Lunarlude
 import Data.List as List
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
-import Lunarflow.Ast (AstF(..), call, lambda, var)
+import Lunarflow.Ast (AstF(..), Name(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (contains, shift)
-import Lunarflow.Function ((|>))
 import Lunarflow.Layout (ScopedLayout, shiftLines)
-import Lunarflow.LayoutM (LayoutM, Position(..), ScopeId, currentScope, getIndexMap, unscopePosition)
-import Matryoshka (cata, embed, project)
+import Lunarflow.LayoutM (LayoutM, Position(..), PositionPointer(..), ScopeId, currentScope, getIndexMap, unscopePosition)
 import Run.Reader (local)
 import Run.State (modify)
 import Undefined (undefined)
@@ -60,14 +56,20 @@ introduce position { from, into } layout = do
           state.indexMap
       }
   -- TODO: put stuff sharing a line with this at the middle
-  layout' <- updatePositions (\(Position index _) -> Position (index + movedCount) into) from layout
+  layout' <-
+    updatePositions
+      ( \(Position (PositionPointer index) _) ->
+          Position (PositionPointer $ index + movedCount) into
+      )
+      from
+      layout
   pure layout'
 
 -- | Transform expressions of the shape (\x -> f x) into f
 etaReduce :: ScopedLayout -> LayoutM (Maybe ScopedLayout)
 etaReduce layout = case project layout |> map project |> map (map project) of
-  Lambda data'@{ scope, position, args: List.Cons _ remaining } (Call _ function (Var { index: 0 }))
-    | not (contains 0 $ embed function) ->
+  Lambda data'@{ scope, position, args: List.Cons _ remaining } (Call _ function (Var { name: Bound 0 }))
+    | not (contains (Bound 0) $ embed function) ->
       Just
         <$> case remaining of
             List.Nil -> do
