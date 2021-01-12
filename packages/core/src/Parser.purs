@@ -25,9 +25,9 @@ parseLambdaCalculus = parseLambdaCalculus' >>> map run
   run :: ForeignAst RawExpression -> RawExpression
   run ast =
     ast
-      { abstraction: mkFn2 lambda
-      , application: mkFn2 (call unit)
-      , variable: var
+      { variable: { name: _ } >>> var
+      , abstraction: mkFn2 $ { argument: _ } >>> lambda
+      , application: mkFn2 (call {})
       }
 
 -- | Unsafe version of parseLambdaCalculus I usually use for debugging.

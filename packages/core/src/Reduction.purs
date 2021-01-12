@@ -9,11 +9,15 @@ import Data.List as List
 import Data.Map as Map
 import Lunarflow.Ast (AstF(..), Name(..), call, lambda, var)
 import Lunarflow.Ast.Grouped (contains, shift)
-import Lunarflow.Layout (ScopedLayout, shiftLines)
+import Lunarflow.Layout (LayoutLike, shiftLines)
 import Lunarflow.LayoutM (LayoutM, Position(..), PositionPointer(..), ScopeId, currentScope, getIndexMap, unscopePosition)
 import Run.Reader (local)
 import Run.State (modify)
 import Undefined (undefined)
+
+-- TODO: remove
+type ScopedLayout
+  = LayoutLike Position () () () ( scope :: ScopeId )
 
 betaReduce :: ScopedLayout -> ScopedLayout
 betaReduce = undefined

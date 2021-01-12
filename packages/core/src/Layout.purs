@@ -1,28 +1,27 @@
 module Lunarflow.Layout
-  ( ScopedLayoutF
-  , ScopedLayout
-  , LayoutF
-  , Layout
-  , LayoutLikeF
+  ( LayoutLikeF
+  , LayoutNodeData
   , LayoutLike
+  , FreeRootsRep
+  , HasFreeTerms
   , generateLayout
   , unscopeLayout
   , markRoot
+  , markFreeRoots
   , shiftLines
+  , layoutingPipeline
   ) where
 
 import Lunarlude
 import Data.Array as Array
-import Data.Lens (over)
-import Data.Lens.Record (prop)
+import Data.HashMap as HashMap
 import Data.List as List
 import Data.Map as Map
 import Data.Set as Set
-import Data.Typelevel.Undefined (undefined)
 import Lunarflow.Ast (AstF(..), Name(..), call, lambda, var)
-import Lunarflow.Ast.Grouped (GroupedLike, GroupedLikeF, references)
+import Lunarflow.Ast.Grouped (GroupedLikeF, GroupedLike, references)
 import Lunarflow.ErrorStack (ErrorStack(..))
-import Lunarflow.LayoutM (AbsolutePosition, LayoutM, Line, LineRep, Position(..), PositionPointer(..), ScopeId(..), currentScope, freshColor, getBinder, getIndexMap, getVarPosition, missingPosition, unscopePosition, while)
+import Lunarflow.LayoutM (AbsolutePosition, Binder, LayoutM, Line, LineRep, Position(..), PositionPointer(..), ScopeId(..), currentScope, freshColor, getIndexMap, getVarPosition, insideScope, lookupBinders, missingPosition, unscopePosition, while)
 import Lunarflow.List (indexed)
 import Prim.Row as Row
 import Record as Record
@@ -35,34 +34,32 @@ import Run.State (get, modify, put)
 data VarPosition p
   = ScopeShift { from :: ScopeId, to :: p }
 
+-- | Row containing data about the free terms needed to render the current node
+type FreeRootsRep r
+  = ( freeTerms :: Set.Set String | r )
+
+-- | Layout with annotations on all nodes with the free variales requied to render it.
+type WithFreeRoots v c a l
+  = GroupedLike (FreeRootsRep v) (FreeRootsRep c) a l
+
+type HasFreeTerms p a
+  = ( freeTerms :: HashMap.HashMap String (Line p ()) | a )
+
+-- | Data all nodes in a layout have
+type LayoutNodeData p a
+  = LineRep p ( inScope :: ScopeId | a )
+
 -- We define this type to clean up the definition of generateLayout
 -- | The base functor for all layouts
 type LayoutLikeF p v c a l
-  = GroupedLikeF (LineRep p v) (Line p c) (Line p a) (LineRep p l)
+  = GroupedLikeF (LayoutNodeData p + HasFreeTerms p v)
+      (LayoutNodeData p + HasFreeTerms p c)
+      (LineRep p a)
+      (LayoutNodeData p + ( scope :: ScopeId | l ))
 
 -- | General type for all layouts
 type LayoutLike p v c a l
   = Mu (LayoutLikeF p v c a l)
-
--- | The base functor for layouts.
-type LayoutF
-  = LayoutLikeF Int () () () ( scope :: ScopeId )
-
--- | Layouts are expressions which have vertical indices for every line.
-type Layout
-  = Mu LayoutF
-
--- | The base functor for scoped layouts.
-type ScopedLayoutF
-  = LayoutLikeF Position () () ()
-      ( scope :: ScopeId
-      , isRoot :: Boolean
-      )
-
--- | Layouts are expressions which have vertical indices for every line.
--- | This is the scoped variant, which keeps track of what scope everything is from.
-type ScopedLayout
-  = Mu ScopedLayoutF
 
 -- | Different ways we can constrain where expressions can be placed.
 data LocationConstraint
@@ -76,65 +73,120 @@ data LocationSearchResult
   | NextTo Int
 
 ---------- Layout generation
+-- | The whole layouting pipeline combined
+layoutingPipeline ::
+  forall v c a l.
+  Row.Lacks "inScope" v =>
+  Row.Lacks "inScope" c =>
+  Row.Lacks "inScope" l =>
+  Row.Lacks "scope" l =>
+  Row.Lacks "isRoot" l =>
+  Row.Lacks "args" l =>
+  Row.Lacks "freeTerms" v =>
+  Row.Lacks "freeTerms" c =>
+  GroupedLike v c a l -> LayoutM (LayoutLike Int v c a ( isRoot :: Boolean | l ))
+layoutingPipeline = markFreeRoots >>> introduceScopes >=> generateLayout >>> map markRoot >=> unscopeLayout
+
+-- | Annotate all the lambdas in an ast with unique scope ids
 introduceScopes ::
   forall v c a l.
+  Row.Lacks "inScope" v =>
+  Row.Lacks "inScope" c =>
+  Row.Lacks "inScope" l =>
   Row.Lacks "scope" l =>
   GroupedLike v c a l ->
-  LayoutM (GroupedLike v c a ( scope :: ScopeId | l ))
+  LayoutM (GroupedLike ( inScope :: ScopeId | v ) ( inScope :: ScopeId | c ) a ( scope :: ScopeId, inScope :: ScopeId | l ))
 introduceScopes =
-  cataM case _ of
-    Var data' -> pure $ var data'
-    Call data' function argument -> pure $ call data' function argument
-    Lambda data' body -> ado
+  cata case _ of
+    Var data' -> currentScope <#> \scope -> var $ setScope scope data'
+    Call data' function argument -> currentScope >>= \scope -> call (setScope scope data') <$> function <*> argument
+    Lambda data' body -> do
+      inScope <- currentScope
       scope <- newScope
-      in lambda (Record.insert _scope scope data') body
+      lambda (Record.union { scope, inScope } data') <$> insideScope scope body
+  where
+  setScope :: forall r. Row.Lacks "inScope" r => ScopeId -> Record r -> { inScope :: ScopeId | r }
+  setScope = Record.insert _inScope
+
+-- | Add annotations to all nodes with all the free variables needed for rendering the current expression.
+markFreeRoots ::
+  forall v c a l.
+  Row.Lacks "freeTerms" v =>
+  Row.Lacks "freeTerms" c =>
+  GroupedLike v c a l -> WithFreeRoots v c a l
+markFreeRoots = cata algebra >>> uncurry (|>)
+  where
+  algebra :: Algebra (GroupedLikeF v c a l) (Tuple (Set.Set String) (Set.Set String -> WithFreeRoots v c a l))
+  algebra = case _ of
+    Var varData@{ name: Free name } -> Tuple (Set.singleton name) \freeTerms -> var $ addRoots freeTerms varData
+    Var varData -> Tuple mempty \_ -> var $ addNoRoots varData
+    Call callData (Tuple functionReferences makeFunction) (Tuple argumentReferences makeArgument) ->
+      Tuple (functionReferences <> argumentReferences) \references ->
+        let
+          common = references `Set.intersection` functionReferences `Set.intersection` argumentReferences
+
+          function = makeFunction $ references `Set.difference` argumentReferences
+
+          argument = makeArgument $ references `Set.difference` functionReferences
+        in
+          call (addRoots common callData) function argument
+    Lambda lambdaData (Tuple bodyReferences makeBody) -> Tuple bodyReferences \references -> lambda lambdaData $ makeBody references
+
+  addRoots :: forall r. Row.Lacks "freeTerms" r => Set.Set String -> Record r -> Record (FreeRootsRep r)
+  addRoots = Record.insert _freeTerms
+
+  addNoRoots :: forall r. Row.Lacks "freeTerms" r => Record r -> Record (FreeRootsRep r)
+  addNoRoots = addRoots Set.empty
 
 -- | Generate a layout from an ast.
 generateLayout ::
   forall v c a l.
   Row.Lacks "args" l =>
-  GroupedLike v (Record c) (Record a) ( scope :: ScopeId | l ) ->
-  LayoutM (LayoutLike Position v c a ( scope :: ScopeId | l ))
+  Row.Lacks "freeTerms" v =>
+  Row.Lacks "freeTerms" c =>
+  WithFreeRoots ( inScope :: ScopeId | v ) ( inScope :: ScopeId | c ) a ( inScope :: ScopeId, scope :: ScopeId | l ) ->
+  LayoutM (LayoutLike Position v c a l)
 generateLayout =
   para case _ of
-    Var data'@{ name: Bound name } ->
-      while "adding indices to a variable" ado
-        { position, color } <- getBinder name
-        in var $ Record.union { position, color } data'
-    Var { name: Free index } -> while "adding indices to a free variable" undefined
+    Var varData ->
+      while "adding indices to a variable"
+        $ withFreeAnnotations varData \freeTerms -> ado
+            { position, color } <- lookupBinders varData.name
+            in var $ Record.union { position, color, freeTerms } $ Record.delete _freeTerms varData
     Call data' (Tuple _ layoutFunction) (Tuple groupedArgument layoutArgument) ->
-      while "adding indices to a call" do
-        let
-          -- This type annotation is here so the compiler
-          -- knows which Unfoldable instance to use.
-          vars :: Array Name
-          vars = Set.toUnfoldable $ references groupedArgument
-        -- This holds all the variables referenced inside the argument of the call
-        inArgument <- Set.fromFoldable <$> for (onlyBound vars) (getBinder >>> map _.position)
-        -- When we draw a call, we draw the function first and then the argument.
-        -- We don't want the space taken by the variables in the argument to be occupied
-        -- So we basically inform the call not to touch those spaces.
-        function <- protect inArgument layoutFunction
-        scope <- currentScope
-        let
-          functionPosition@(Position functionIndex functionScope) = getPosition function
+      while "adding indices to a call"
+        $ withFreeAnnotations data' \freeTerms -> do
+            let
+              -- This type annotation is here so the compiler
+              -- knows which Unfoldable instance to use.
+              vars :: Array Name
+              vars = Set.toUnfoldable $ references groupedArgument
+            -- This holds all the variables referenced inside the argument of the call
+            inArgument <- Set.fromFoldable <$> for (onlyBound vars) getVarPosition
+            -- When we draw a call, we draw the function first and then the argument.
+            -- We don't want the space taken by the variables in the argument to be occupied
+            -- So we basically inform the call not to touch those spaces.
+            function <- protect inArgument layoutFunction
+            scope <- currentScope
+            let
+              functionPosition@(Position functionIndex functionScope) = getPosition function
 
-          -- PureScript doesn't genralize let bindings 
-          -- so we have to write this type definition ourselves.
-          nearFunction :: LayoutM ~> LayoutM
-          nearFunction
-            | functionScope == scope = attractTo functionIndex
-            | otherwise = identity
-        argument <- protect (Set.singleton functionPosition) $ nearFunction layoutArgument
-        let
-          argumentPosition = getPosition argument
+              -- PureScript doesn't genralize let bindings 
+              -- so we have to write this type definition ourselves.
+              nearFunction :: LayoutM ~> LayoutM
+              nearFunction
+                | functionScope == scope = attractTo functionIndex
+                | otherwise = identity
+            argument <- protect (Set.singleton functionPosition) $ nearFunction layoutArgument
+            let
+              argumentPosition = getPosition argument
 
-          except = Set.fromFoldable [ functionPosition, argumentPosition ]
-        constraint <- constrain functionPosition argumentPosition
-        position <- nearFunction $ ask <#> _.near >>= placeExpression { except, constraint }
-        let
-          data'' = Record.union { position, color: getColor function } data'
-        pure $ call data'' function argument
+              except = Set.fromFoldable [ functionPosition, argumentPosition ]
+            constraint <- constrain functionPosition argumentPosition
+            position <- nearFunction $ ask <#> _.near >>= placeExpression { except, constraint }
+            let
+              data'' = Record.union { position, color: getColor function, freeTerms } $ Record.delete _freeTerms data'
+            pure $ call data'' function argument
     expression@(Lambda data'@{ args: vars } (Tuple _ layoutBody)) ->
       while "adding indices to a lambda" do
         -- Each lambda has it's own scope so we generate a new one
@@ -146,7 +198,7 @@ generateLayout =
             in Record.union { position: Position (PositionPointer $ varCount - index - 1) scope, color } argument
         -- Add the new scope to the index map
         modify $ over (prop _indexMap) $ Map.insert scope positionMemory
-        -- TODO: create helper for 'flip local'
+        -- TODO: create helper for 'flip local'?
         body <-
           flip local layoutBody \ctx ->
             ctx
@@ -170,11 +222,21 @@ generateLayout =
 
       varCount = List.length vars
   where
-  onlyBound :: Array Name -> Array Int
+  onlyBound :: Array Name -> Array Name
   onlyBound =
-    Array.mapMaybe case _ of
-      Bound index -> Just index
-      Free _ -> Nothing
+    Array.filter case _ of
+      Bound i -> true
+      _ -> false
+
+  withFreeAnnotations :: forall r b. Record (FreeRootsRep r) -> (HashMap.HashMap String (Binder Position) -> LayoutM b) -> LayoutM b
+  withFreeAnnotations vars m = do
+    varPositionsAndColors <-
+      HashMap.fromArray
+        <$> for (Array.fromFoldable vars.freeTerms) \name -> ado
+            color <- freshColor
+            position <- ask <#> _.near >>= placeExpression { except: Set.empty, constraint: Everywhere }
+            in Tuple name { color, position }
+    flip local (m varPositionsAndColors) $ over (prop _free) $ HashMap.union varPositionsAndColors
 
 -- | Search for the optimal location to put something at.
 findLocation ::
@@ -276,14 +338,8 @@ unscopeLayout a = while "unscoping layout" $ m a
   m :: LayoutLike Position v c a l -> LayoutM (LayoutLike Int v c a l)
   m =
     cata case _ of
-      Var data' -> ado
-        position <- unscopePosition data'.position
-        in var data' { position = position }
-      Call data' function argument -> ado
-        function' <- function
-        argument' <- argument
-        position <- unscopePosition data'.position
-        in call data' { position = position } function' argument'
+      Var varData -> var <$> unscopeLayoutNodeData varData
+      Call callData function argument -> call <$> unscopeLayoutNodeData callData <*> function <*> argument
       Lambda data' body -> ado
         body' <- body
         args <-
@@ -291,7 +347,19 @@ unscopeLayout a = while "unscoping layout" $ m a
             position <- unscopePosition arg.position
             in arg { position = position }
         position <- unscopePosition data'.position
-        in lambda data' { position = position, args = args } body'
+        in flip lambda body' $ Record.set _position position $ Record.set _args args data'
+
+  unscopeLayoutNodeData ::
+    forall r.
+    Record (LineRep Position + HasFreeTerms Position r) ->
+    LayoutM (Record (LineRep Int + HasFreeTerms Int r))
+  unscopeLayoutNodeData node = ado
+    freeTerms <-
+      for node.freeTerms \var -> ado
+        position <- unscopePosition var.position
+        in var { position = position }
+    position <- unscopePosition node.position
+    in node { position = position, freeTerms = freeTerms }
 
 ---------- Helpers
 -- | Move all the lines past a certain point by an arbitrary amount.
@@ -312,14 +380,25 @@ shiftLines scope { past, amount } =
 
 -- | If the expression starts off with a lambda, mark it up as the root lambda.
 -- | We do this to avoid adding an unnecessary box around the root lambda later in the pipeline.
-markRoot :: ScopedLayout -> ScopedLayout
-markRoot x = case project x of
-  Lambda data' body -> lambda (data' { isRoot = true }) body
-  _ -> x
+markRoot ::
+  forall v c a l.
+  Row.Lacks "isRoot" l =>
+  GroupedLike v c a l -> GroupedLike v c a ( isRoot :: Boolean | l )
+markRoot =
+  addRoots
+    >>> \x -> case project x of
+        Lambda data' body -> lambda (data' { isRoot = true }) body
+        _ -> x
+  where
+  addRoots =
+    cata case _ of
+      Var varData -> var varData
+      Call callData function argument -> call callData function argument
+      Lambda lambdaData body -> flip lambda body $ Record.insert _isRoot false lambdaData
 
 ---------- Internal helpers
 -- | Run a computation in a context where 
--- an arbitrary set of positions is protected.
+-- | an arbitrary set of positions is protected.
 protect :: Set.Set Position -> LayoutM ~> LayoutM
 protect inputs = local (\a -> a { protected = a.protected <> inputs })
 
@@ -382,3 +461,18 @@ _scope = SProxy
 
 _args :: SProxy "args"
 _args = SProxy
+
+_isRoot :: SProxy "isRoot"
+_isRoot = SProxy
+
+_position :: SProxy "position"
+_position = SProxy
+
+_freeTerms :: SProxy "freeTerms"
+_freeTerms = SProxy
+
+_free :: SProxy "free"
+_free = SProxy
+
+_inScope :: SProxy "inScope"
+_inScope = SProxy

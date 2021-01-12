@@ -5,6 +5,7 @@ module Lunarflow.Geometry.Foreign
   , bounds
   , boundsImpl
   , getRightBound
+  , geometryBounds
   ) where
 
 import Prelude
@@ -33,7 +34,11 @@ fromShape = case _ of
 
 -- | Find the smallest rect some shapes fit in.
 bounds :: Shape -> Maybe Bounds
-bounds = fromShape >>> boundsImpl >>> Nullable.toMaybe
+bounds = fromShape >>> geometryBounds
+
+-- | Find the smallest rect some geometry fits in.
+geometryBounds :: Geometry -> Maybe Bounds
+geometryBounds = boundsImpl >>> Nullable.toMaybe
 
 -- TODO: more efficient way
 -- | Get the rightmost point in a shape 

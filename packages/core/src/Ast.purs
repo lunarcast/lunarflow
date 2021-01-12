@@ -2,8 +2,6 @@ module Lunarflow.Ast
   ( AstF(..)
   , Ast
   , RawExpression
-  , Expression
-  , WithIndex
   , DeBrujinLikeF
   , DeBrujinLike
   , Name(..)
@@ -12,6 +10,8 @@ module Lunarflow.Ast
   , lambda
   , var
   , printDeBrujin
+  , printRawExpression
+  , printAst
   , isVar
   , mapIndex
   , shiftIndex
@@ -19,7 +19,9 @@ module Lunarflow.Ast
 
 import Lunarlude
 import Control.Monad.Reader (Reader, asks, local, runReader)
+import Data.Hashable (class Hashable, hash)
 import Data.List as List
+import Record as Record
 
 -- | The meat and potatoes of representing an expression.
 -- |
@@ -27,26 +29,28 @@ import Data.List as List
 -- | - c represents the type calls carry around.
 -- | - v represents the type variables carry around.
 data AstF v c l r
-  = Call c r r
-  | Lambda l r
-  | Var v
+  = Call (Record c) r r
+  | Lambda (Record l) r
+  | Var (Record v)
 
 -- | The fixpoint of the ast functor.
 type Ast v c l
   = Mu (AstF v c l)
 
-call :: forall t v c l. Corecursive t (AstF v c l) => c -> t -> t -> t
+---------- Constructors
+call :: forall t v c l. Corecursive t (AstF v c l) => Record c -> t -> t -> t
 call c f a = embed (Call c f a)
 
-var :: forall t v c l. Corecursive t (AstF v c l) => v -> t
+var :: forall t v c l. Corecursive t (AstF v c l) => Record v -> t
 var = embed <<< Var
 
-lambda :: forall t v c l. Corecursive t (AstF v c l) => l -> t -> t
+lambda :: forall t v c l. Corecursive t (AstF v c l) => Record l -> t -> t
 lambda l t = embed (Lambda l t)
 
+--------- De bruhin construction
 -- | Basic lambda calculus expressions
 type RawExpression
-  = Ast String Unit String
+  = Ast ( name :: String ) () ( argument :: String )
 
 -- | Variable names for stuff using de brujin indices.
 data Name
@@ -55,37 +59,32 @@ data Name
 
 -- | Base functor for expressions using de bruhin indices
 type DeBrujinLikeF v c l
-  = AstF { name :: Name | v } c l
+  = AstF ( name :: Name | v ) c l
 
 -- | Expressions using de brujin indidces
 type DeBrujinLike v c l
   = Mu (DeBrujinLikeF v c l)
 
--- | Lambda calculus expression using de brujin indices.
-type Expression
-  = DeBrujinLike () Unit String
-
-type WithIndex r
-  = ( index :: Int | r )
-
 -- | Add de brujin indices to a lambda calculus expression.
-withDebrujinIndices :: RawExpression -> Expression
+withDebrujinIndices :: forall v c l. Ast ( name :: String | v ) c ( argument :: String | l ) -> DeBrujinLike v c ( argument :: String | l )
 withDebrujinIndices expr = runReader (cata algebra expr) List.Nil
   where
-  algebra :: Algebra (AstF String Unit String) (Reader (List.List String) Expression)
+  algebra :: Algebra _ (Reader (List.List String) _)
   algebra = case _ of
-    Call _ func argument -> ado
-      func' <- func
-      argument' <- argument
-      in call unit func' argument'
-    Lambda name body -> ado
-      body' <- local (List.Cons name) body
-      in lambda name body'
-    Var name -> ado
-      maybeIndex <- asks $ List.findIndex (eq name)
-      in case maybeIndex of
-        Just index -> var { name: Bound index }
-        Nothing -> var { name: Free name }
+    Call callData function argument -> call callData <$> function <*> argument
+    Lambda lambdaData body -> ado
+      body' <- local (List.Cons lambdaData.argument) body
+      in lambda lambdaData body'
+    Var varData -> ado
+      maybeIndex <- asks $ List.findIndex (eq varData.name)
+      in var
+        $ Record.set
+            _name
+            ( case maybeIndex of
+                Just index -> Bound index
+                Nothing -> Free varData.name
+            )
+            varData
 
 ----------  Pretty printing stuff:
 -- | Check if an ast chunk needs to be wrapped in parenthesis for printing
@@ -109,15 +108,46 @@ parenthesiseWhen false = identity
 lambdaChar :: String
 lambdaChar = "λ"
 
+-- | Print an expression which doesn't use de brujin indices.
+printRawExpression :: RawExpression -> String
+printRawExpression = printAst _.name printCall printLambda
+  where
+  printCall _ f a = f <> " " <> a
+
+  printLambda { argument } body = lambdaChar <> argument <> ". " <> body
+
 -- | Print an expression which uses de brujin indices.
 printDeBrujin :: forall v c l. DeBrujinLike v c l -> String
-printDeBrujin =
+printDeBrujin = printAst (_.name >>> show) printCall (const (lambdaChar <> _))
+  where
+  printCall _ f a = f <> " " <> a
+
+-- | Generalised ast printing
+printAst ::
+  forall v c l.
+  (Record v -> String) ->
+  (Record c -> String -> String -> String) ->
+  (Record l -> String -> String) ->
+  Ast v c l -> String
+printAst printVar printCall printLambda =
   para case _ of
-    Var { name } -> show name
-    Lambda _ (Tuple _ body) -> lambdaChar <> body
-    Call _ (Tuple funcAst func) (Tuple argAst arg) ->
-      parenthesiseWhen (needsParenthesis true $ project funcAst) func
-        <> parenthesiseWhen (needsParenthesis false $ project argAst) arg
+    Var varData -> printVar varData
+    Call callData (Tuple functionAst function) (Tuple argumentAst argument) -> printCall callData functionWithParenthesis argumentWithParenthesis
+      where
+      functionWithParenthesis =
+        parenthesiseWhen
+          ( needsParenthesis true
+              $ project functionAst
+          )
+          function
+
+      argumentWithParenthesis =
+        parenthesiseWhen
+          ( needsParenthesis false
+              $ project argumentAst
+          )
+          argument
+    Lambda lambdaData (Tuple _ body) -> printLambda lambdaData body
 
 ---------- Helpers
 -- | Apply a function over the index inside a name
@@ -167,10 +197,10 @@ instance traversavleAst :: Traversable (AstF v c l) where
     Call data' function argument -> Call data' <$> f function <*> f argument
     Lambda data' body -> Lambda data' <$> f body
 
-instance showAst :: (Show v, Show c, Show l, Show f) => Show (AstF v c l f) where
+instance showAst :: (Show (Record v), Show (Record c), Show (Record l), Show f) => Show (AstF v c l f) where
   show = genericShow
 
-instance debugAst :: (Debug v, Debug c, Debug l) => Debug (AstF v c l TacitRepr) where
+instance debugAst :: (Debug (Record v), Debug (Record c), Debug (Record l)) => Debug (AstF v c l TacitRepr) where
   debug = genericDebug
 
 derive instance eqName :: Eq Name
@@ -180,3 +210,18 @@ derive instance ordName :: Ord Name
 instance showName :: Show Name where
   show (Bound i) = show i
   show (Free name) = name
+
+derive instance genericName :: Generic Name _
+
+instance debugName :: Debug Name where
+  debug = genericDebug
+
+instance hashableAst :: Hashable Name where
+  hash name =
+    hash case name of
+      Bound index -> Right index
+      Free free -> Left free
+
+---------- SProxies
+_name :: SProxy "name"
+_name = SProxy

@@ -17,26 +17,31 @@ module Lunarflow.LayoutM
   , missingPosition
   , freshColor
   , getIndexMap
-  , getBinder
+  , lookupBinders
   , runLayoutM
   , runLayoutMWithState
   , currentScope
   , unscopePosition
   , while
   , getVarPosition
+  , insideScope
   ) where
 
 import Lunarlude
 import Data.Array as Array
+import Data.HashMap as HashMap
+import Data.Hashable (class Hashable, hash)
 import Data.List as List
 import Data.List.Lazy as LazyList
 import Data.Map as Map
 import Data.Set as Set
+import Lunarflow.Ast (Name(..))
 import Lunarflow.ErrorStack (EXCEPT_STACKED, EitherStacked, throw)
 import Lunarflow.ErrorStack as Stacked
+import Record as Record
 import Run (Run, expand, extract)
 import Run.Except (runExcept)
-import Run.Reader (READER, ask, runReader)
+import Run.Reader (READER, ask, local, runReader)
 import Run.State (STATE, get, put, runState)
 
 ---------- Type
@@ -78,6 +83,7 @@ type IndexMap
 type LayoutContext
   = { protected :: Set.Set Position
     , binders :: List.List (Binder Position)
+    , free :: HashMap.HashMap String (Binder Position)
     , currentScope :: ScopeId
     , near :: PositionPointer
     }
@@ -95,6 +101,7 @@ data LayoutError
   | MissingIndexMap ScopeId
   | MissingPosition (List.List AbsolutePosition) Position
   | ColorDrought
+  | FreeNotAnnotated String
 
 -- | The monad we generate layouts in.
 type LayoutM
@@ -127,18 +134,23 @@ getIndexMap scope = do
     Just list -> pure list
     Nothing -> throw $ MissingIndexMap scope
 
--- TODO: better error messages.
 -- | Get the position and color a var has in the current scope.
-getBinder :: Int -> LayoutM (Binder Position)
-getBinder index = do
-  binders <- ask <#> _.binders
-  case binders `List.index` index of
-    Just binder -> pure binder
-    Nothing -> throw $ BinderNotInScope index
+lookupBinders :: Name -> LayoutM (Binder Position)
+lookupBinders = case _ of
+  Bound index -> do
+    binders <- ask <#> _.binders
+    case binders `List.index` index of
+      Just binder -> pure binder
+      Nothing -> throw $ BinderNotInScope index
+  Free name -> do
+    free <- ask <#> _.free
+    case name `HashMap.lookup` free of
+      Just binder -> pure binder
+      Nothing -> throw $ FreeNotAnnotated name
 
 -- | Get the position a var has in the current scope
-getVarPosition :: Int -> LayoutM Position
-getVarPosition = getBinder >>> map _.position
+getVarPosition :: Name -> LayoutM Position
+getVarPosition = lookupBinders >>> map _.position
 
 -- | Run the computations in the Layout monad.
 runLayoutM :: forall a. LayoutM a -> EitherStacked String LayoutError (Tuple LayoutState a)
@@ -157,6 +169,7 @@ runLayoutMWithState state = runReader ctx >>> runState state >>> runExcept >>> e
   ctx =
     { protected: Set.empty
     , binders: List.Nil
+    , free: HashMap.empty
     , currentScope: Root
     , near: PositionPointer 0
     }
@@ -174,6 +187,9 @@ unscopePosition position@(Position (PositionPointer index) scope) =
     case List.index list index of
       Just absolute -> pure absolute
       Nothing -> throw $ MissingPosition list position
+
+insideScope :: ScopeId -> LayoutM ~> LayoutM
+insideScope scope = local $ Record.set _currentScope scope
 
 -- | Add more context data to errors.
 while :: String -> LayoutM ~> LayoutM
@@ -193,6 +209,12 @@ instance showScopeId :: Show ScopeId where
   show = case _ of
     Root -> "<root>"
     ScopeId id -> show id
+
+instance hashableScopeId :: Hashable ScopeId where
+  hash scope =
+    hash case scope of
+      Root -> Nothing
+      ScopeId id -> Just id
 
 derive instance eqPositionPointer :: Eq PositionPointer
 
@@ -223,6 +245,7 @@ instance debugLayoutError :: Debug LayoutError where
 
 instance showLayoutError :: Show LayoutError where
   show = case _ of
+    FreeNotAnnotated name -> "Free variable " <> name <> " did not appear in any free-references annotation"
     BinderNotInScope index -> "Variable " <> show index <> " is not in scope."
     MissingIndexMap scope -> "Cannot find index list for scope " <> show scope <> "."
     MissingPosition list (Position index scope) ->
@@ -234,3 +257,7 @@ instance showLayoutError :: Show LayoutError where
         <> show (Array.fromFoldable list)
         <> "."
     ColorDrought -> "Run out of colors while generating the layout"
+
+---------- SProxies
+_currentScope :: SProxy "currentScope"
+_currentScope = SProxy

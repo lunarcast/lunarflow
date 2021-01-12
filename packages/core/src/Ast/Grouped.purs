@@ -1,8 +1,6 @@
 module Lunarflow.Ast.Grouped
   ( GroupedLikeF
   , GroupedLike
-  , GroupedExpression
-  , _args
   , groupExpression
   , ungroupExpression
   , references
@@ -20,19 +18,11 @@ import Record as Record
 -- TODO: Make the argument list nonempty.
 -- | Base functor for grouped expressions
 type GroupedLikeF v c a l
-  = DeBrujinLikeF v c { args :: List.List a | l }
+  = DeBrujinLikeF v c ( args :: List.List (Record a) | l )
 
 -- | A chunk of lambda calculus ast which has itconsecutive lambdas gruoped.
 type GroupedLike v c a l
   = Mu (GroupedLikeF v c a l)
-
--- | Grouped expressions merge consecutive lambdas into groups.
-type GroupedExpression
-  = GroupedLike () Unit String ()
-
--- | Typelevel string for the field the arg list is stored in
-_args :: SProxy "args"
-_args = SProxy
 
 -- | Merge all the lambdas in groups.
 groupExpression :: forall v c l. DeBrujinLike v c l -> GroupedLike v c l ()
@@ -47,7 +37,7 @@ groupExpression =
 -- | Split all the lambdas from groups.
 ungroupExpression ::
   forall v c a l r.
-  Row.Lacks "args" l => (a -> Record l -> r) -> GroupedLike v c a l -> DeBrujinLike v c r
+  Row.Lacks "args" l => (Record a -> Record l -> Record r) -> GroupedLike v c a l -> DeBrujinLike v c r
 ungroupExpression f =
   cata case _ of
     Call data' a b -> call data' a b
@@ -96,3 +86,7 @@ shift initialPast amount = flip (cata algebra) initialPast
     Var data' -> var data'
     Call data' function argument -> call data' (function past) (argument past)
     Lambda data' body -> lambda data' $ body (List.length data'.args + past)
+
+--------- SProxies
+_args :: SProxy "args"
+_args = SProxy
