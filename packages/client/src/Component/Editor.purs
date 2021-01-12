@@ -1,34 +1,49 @@
 module Lunarflow.Component.Editor where
 
-import Prelude
+import Lunarlude
 import Concur.Core (Widget)
 import Concur.React (HTML)
 import Concur.React.DOM as D
 import Concur.React.Props as P
-import Control.Plus ((<|>))
-import Data.Foldable (foldr, traverse_)
-import Data.HashMap as Map
-import Data.Lens (set)
-import Data.Lens.Record (prop)
-import Data.Maybe (Maybe(..))
-import Data.Symbol (SProxy(..))
-import Data.Tuple (Tuple(..))
-import Effect.Aff (Milliseconds(..), delay)
-import Effect.Aff.Class (liftAff)
-import Effect.Class (liftEffect)
+import Data.HashMap as HashMap
+import Data.List as List
+import Data.Map as Map
+import Effect.Aff.Bus as Bus
 import Effect.Class.Console as Console
-import Graphics.Canvas (CanvasElement, Context2D, getContext2D)
-import Lunarflow.Ast (Expression, printDeBrujin, withDebrujinIndices)
-import Lunarflow.Function ((|>))
+import Graphics.Canvas (CanvasElement, Context2D, getContext2D, restore, save)
+import Lunarflow.Ast (RawExpression, printRawExpression, withDebrujinIndices)
+import Lunarflow.Ast.Grouped (groupExpression)
+import Lunarflow.Event (eventBus)
+import Lunarflow.Geometry.Foreign (fromShape, geometryBounds, renderGeometry)
+import Lunarflow.Layout (layoutingPipeline)
+import Lunarflow.LayoutM (ScopeId(..), runLayoutMWithState)
 import Lunarflow.Parser (unsafeParseLambdaCalculus)
+import Lunarflow.Render (render, runRenderM)
+import Lunarflow.Renderer.Canvas (clear, fitIntoBounds, stretch)
+import Lunarflow.Renderer.Constants (backgroundColor, colors)
+import Lunarflow.Renderer.WithHeight (withHeights)
 import Lunarflow.Tea (TeaM, tea)
-import React.Ref (NativeNode)
+import Partial.Unsafe (unsafeCrashWith)
 import React.Ref as Ref
-import Run.State (get, modify)
+import Run (EFFECT, Run, AFF)
+import Run.Except (FAIL, fromJust, runFail)
+import Run.State (STATE, get, gets, modify)
 import Unsafe.Coerce (unsafeCoerce)
+import Web.Event.Event (Event, EventType(..))
+import Web.HTML as HTML
+import Web.HTML.Window as Window
+
+--------- Types
+type EditorM
+  = Run
+      ( effect :: EFFECT
+      , aff :: AFF
+      , state :: STATE EditorState
+      , except :: FAIL
+      )
 
 type ExpressionEnvironment
-  = { expressions :: Map.HashMap String Expression
+  = { expressions :: HashMap.HashMap String RawExpression
     }
 
 type EditorState
@@ -36,44 +51,54 @@ type EditorState
     , selectedExpression :: Maybe String
     , context ::
         Maybe
-          { node :: NativeNode
+          { node :: Ref.NativeNode
           , context :: Context2D
           }
     , initializing :: Boolean
+    , resizeBus :: Bus.BusR Event
     }
 
 type ExpressionInput
   = { name :: String
-    , expression :: Expression
+    , expression :: RawExpression
     , isSelected :: Boolean
     }
 
 data EditorAction
   = SelectExpression String
-  | WithRef NativeNode EditorAction
+  | WithRef Ref.NativeNode EditorAction
   | Render
   | Init
+  | Resize
 
+--------- Components
 editor :: forall a. Widget HTML a
-editor = tea defaultState editor' handleAction
+editor = do
+  window <- liftEffect HTML.window
+  resizeBus <- liftEffect $ eventBus (EventType "resize") true (Window.toEventTarget window)
+  tea (defaultState resizeBus) editor' $ handleAction >>> runEditorM
   where
-  defaultState :: EditorState
+  defaultState :: Bus.BusR Event -> EditorState
   defaultState =
     { env:
         { expressions:
-            Map.fromFoldable
+            HashMap.fromFoldable
               [ mkFunction "zero" """\s z. z"""
+              , mkFunction "identity" """\x. x"""
               , mkFunction "one" """\s z. s z"""
               , mkFunction "succ" """\n s z. s (n s z)"""
+              , mkFunction "three" """\s z. s (s (s z))"""
+              , mkFunction "four" """succ three"""
               ]
         }
-    , selectedExpression: Just "succ"
+    , selectedExpression: Just "identity"
     , context: Nothing
     , initializing: true
+    , resizeBus: _
     }
 
-  mkFunction :: String -> String -> Tuple String Expression
-  mkFunction name input = Tuple name (unsafeParseLambdaCalculus input |> withDebrujinIndices)
+  mkFunction :: String -> String -> Tuple String RawExpression
+  mkFunction name input = Tuple name $ unsafeParseLambdaCalculus input
 
 editorExpression :: ExpressionInput -> Widget HTML EditorAction
 editorExpression { name, expression, isSelected } =
@@ -86,7 +111,7 @@ editorExpression { name, expression, isSelected } =
             [ D.div [ P.className "expression__name" ] [ D.text name ]
             ]
         , D.div [ P.className "expression__text" ]
-            [ D.text (printDeBrujin expression)
+            [ D.text (printRawExpression expression)
             ]
         ]
     ]
@@ -97,14 +122,17 @@ editor' state = do
   action <-
     D.div [ P.className "editor" ]
       [ D.div [ P.className "editor__expression" ]
-          (state.env.expressions |> Map.toArrayBy mkExpression)
+          (state.env.expressions |> HashMap.toArrayBy mkExpression)
       , D.canvas [ P.className "editor__visualization", P.ref $ Ref.fromRef canvasRef ] []
       , D.div [ P.className "editor__reduction" ] []
       ]
       <|> spice
+      <|> resizeEvent
   liftEffect (Ref.getCurrentRef canvasRef)
     <#> foldr WithRef action
   where
+  resizeEvent = liftAff $ Bus.read state.resizeBus $> Resize
+
   mkExpression name expression =
     editorExpression
       { name
@@ -118,12 +146,16 @@ editor' state = do
     | otherwise = mempty
 
 -- Action handlers
-handleAction :: EditorAction -> TeaM EditorState Unit
+handleAction :: EditorAction -> EditorM Unit
 handleAction = case _ of
   Init -> do
-    Console.log "initializing"
+    Console.log "finished initializing"
     modify $ set (prop _initializing) false
-  SelectExpression name -> modify $ selectExpression name
+  SelectExpression name -> do
+    previouslySelected <- gets _.selectedExpression
+    modify $ selectExpression name
+    unless (previouslySelected == Just name) do
+      handleAction Render
   WithRef node action -> do
     maybeContext <- get <#> _.context
     case maybeContext of
@@ -133,20 +165,76 @@ handleAction = case _ of
         modify $ set (prop _context) $ Just { node, context }
         handleAction Render
     handleAction action
-  Render ->
-    get <#> _.context
-      >>= traverse_ \context -> do
-          Console.log "rendering"
+  Resize -> do
+    Console.log "The window was resized!"
+    handleAction Render
+  Render -> do
+    ctx <- getContext
+    raw <- getSelectedExpression
+    let
+      state =
+        { colors: colors
+        , indexMap: Map.singleton Root $ List.singleton 0
+        , lastScope: -1
+        }
 
--- State manipulating
+      shape =
+        raw
+          |> withDebrujinIndices
+          |> groupExpression
+          |> layoutingPipeline
+          |> runLayoutMWithState state
+          |> map snd
+          |> flip either identity
+              ( \a ->
+                  unsafeCrashWith $ show a
+              )
+          -- |> debugSpy
+          
+          |> withHeights
+          |> render
+          |> runRenderM
+          |> flip either identity
+              ( \a ->
+                  unsafeCrashWith $ show a
+              )
+
+      geometry = fromShape shape
+    liftEffect do
+      clear backgroundColor ctx
+      stretch ctx
+      save ctx
+      case geometryBounds geometry of
+        Just bounds -> fitIntoBounds bounds ctx
+        Nothing -> pure unit
+      renderGeometry geometry ctx
+      restore ctx
+
+--------- Helpers
+-- | Mark an expression as selected
 selectExpression :: String -> EditorState -> EditorState
 selectExpression name = set (prop _selectedExpression) $ Just name
 
--- Helpers
-refToCanvas :: NativeNode -> CanvasElement
+-- | Try getting the current expression, fail if we can't find one
+getSelectedExpression :: EditorM RawExpression
+getSelectedExpression = do
+  state <- get
+  state.selectedExpression
+    >>= flip HashMap.lookup state.env.expressions
+    |> fromJust
+
+-- | Try getting the current canvas context, fail if we can't find one
+getContext :: EditorM Context2D
+getContext = get <#> _.context >>= fromJust <#> _.context
+
+refToCanvas :: Ref.NativeNode -> CanvasElement
 refToCanvas = unsafeCoerce
 
--- SProxies (generated using a vscode snippet) 
+-- | Strip down the capabilities offered by the editor monad down to the bare-bones tea monad
+runEditorM :: EditorM Unit -> TeaM EditorState Unit
+runEditorM = runFail >>> voidRight unit
+
+---------- SProxies (generated using a vscode snippet) 
 _env :: SProxy "env"
 _env = SProxy
 

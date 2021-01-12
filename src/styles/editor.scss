@@ -17,9 +17,11 @@
   column-gap: theme.$spacing / 1.3;
 }
 
-.editor__expression,
-.editor__reduction,
 .editor__visualization {
+  background: lighten(theme.$bg, 5%);
+}
+.editor__expression,
+.editor__reduction {
   background: theme.$bg;
   filter: brightness(1.3);
 }

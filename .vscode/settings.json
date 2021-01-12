@@ -29,5 +29,9 @@
     "spago",
     "thomashoneyman"
   ],
-  "scss.lint.unknownAtRules": "ignore"
+  "scss.lint.unknownAtRules": "ignore",
+  "[purescript]": {
+    "editor.defaultFormatter": "mvakula.vscode-purty",
+    "editor.formatOnSave": true
+  }
 }

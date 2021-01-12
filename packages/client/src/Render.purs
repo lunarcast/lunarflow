@@ -2,31 +2,38 @@
 module Lunarflow.Render where
 
 import Lunarlude
-import Data.Array as Arary
 import Data.Array as Array
+import Data.HashMap as HashMap
 import Data.List as List
 import Data.Typelevel.Num (d0, d1)
 import Data.Vec (vec2, (!!))
-import Effect.Exception.Unsafe (unsafeThrow)
-import Lunarflow.Ast (AstF(..), Name(..))
+import Debug.Trace (traceM)
+import Lunarflow.Ast (AstF(..), Name)
 import Lunarflow.Geometry.Types as Shape
 import Lunarflow.Label (class Label)
+import Lunarflow.LayoutM (ScopeId(..))
 import Lunarflow.Renderer.Constants (callAngle, callAngleCosinus, callAngleSinus, callAngleTangent, callCircleColor, lineHeight, linePadding, lineTipWidth, lineWidth, unitHeight)
 import Lunarflow.Renderer.WithHeight (YLayoutLike, YLayoutLikeF, YMeasures, totalHeight)
 import Lunarflow.Vector as Vector
+import NameMap as NameMap
 import Run (Run, extract)
+import Run.Except (EXCEPT, note, runExcept)
 import Run.Reader (READER, ask, local, runReader)
 
+data RenderingError
+  = NotInScope Name
+  | MissingScope ScopeId
+
 type RenderContext
-  = { starts :: Array Int
-    , xStart :: Int
-    , slices :: Array YMeasures
-    , yOffsets :: Array Int
+  = { xStart :: Int
+    , starts :: NameMap.NameMap Int
+    , scopes :: HashMap.HashMap ScopeId { measures :: YMeasures, y :: Int }
     }
 
 type RenderM
   = Run
       ( reader :: READER RenderContext
+      , except :: EXCEPT RenderingError
       )
 
 type RenderList
@@ -43,46 +50,41 @@ render :: forall v c a l. Tuple YMeasures (YLayoutLike v c a l) -> RenderM Shape
 render (Tuple rootMeasures layout) =
   layout
     |> cata algebra
-    |> local (_ { slices = [ rootMeasures ] })
+    |> local (_ { scopes = HashMap.singleton Root { measures: rootMeasures, y: 0 } })
     |> map ((\{ shapes, overlays } -> shapes <> overlays) >>> Shape.fromFoldable)
   where
   algebra :: Algebra (YLayoutLikeF v c a l) (RenderM RenderList)
-  algebra (Var { position, name: Bound index, color }) = do
-    { xStart, slices } <- ask
-    yOffset <- getYOffset index
-    start <- getStart index
-    let
-      y = yOffset + linePadding + getY index position 1 slices
-
-      width = max lineWidth (xStart - start)
-    pure
-      { color
-      , lineY: y
-      , maxX: start + width
-      , overlays: []
-      , shapes:
-          [ Shape.rect
-              { fill: color
+  algebra (Var { position, inScope, name, color, freeTerms }) =
+    ask
+      >>= \{ xStart } ->
+          withFreeVars xStart freeTerms do
+            yOffset <- getYOffset inScope
+            start <- getStart name
+            y <- getY inScope position 1 <#> \y -> y + yOffset + linePadding
+            traceM { position, name, y }
+            let
+              width = max lineWidth (xStart - start)
+            pure
+              { color
+              , lineY: y
+              , maxX: start + width
+              , overlays: []
+              , shapes:
+                  [ Shape.rect
+                      { fill: color
+                      }
+                      { x: start
+                      , y
+                      , height: lineHeight
+                      , width: width
+                      }
+                  ]
               }
-              { x: start
-              , y
-              , height: lineHeight
-              , width: width
-              }
-          ]
-      }
 
-  algebra (Var _) = unsafeThrow "Cannot render free variables yet"
-
-  algebra (Lambda data'@{ args, heights, position, isRoot } body) = do
+  algebra (Lambda data'@{ args, heights, position, isRoot, inScope, scope } body) = do
     xStart <- ask <#> _.xStart
-    slices <- ask <#> _.slices
-    yOffset <- getYOffset 0
-    --
-    let
-      argCount = List.length args
-
-      updatedYOffset = yOffset + getY 0 position (totalHeight heights) slices
+    yOffset <- getYOffset inScope
+    updatedYOffset <- getY inScope position (totalHeight heights) <#> \y -> y + yOffset
     --
     bodyRenderList <-
       local
@@ -112,7 +114,7 @@ render (Tuple rootMeasures layout) =
       lambdaShape :: Shape.Shape
       lambdaShape =
         Shape.rect
-          { fill: if isRoot then "transparent" else "rgb(196,196,196, 0.12)"
+          { fill: "rgb(196,196,196, 0.12)"
           }
           { y: updatedYOffset
           , height
@@ -122,7 +124,7 @@ render (Tuple rootMeasures layout) =
 
       renderList :: RenderList
       renderList =
-        { shapes: [ lambdaShape ] <> bodyRenderList.shapes
+        { shapes: (if isRoot then [] else [ lambdaShape ]) <> bodyRenderList.shapes
         , overlays: bodyRenderList.overlays
         , color: bodyRenderList.color
         , lineY
@@ -130,24 +132,24 @@ render (Tuple rootMeasures layout) =
         }
     pure renderList
     where
-    updateContext { argCount, yOffset, start } ctx =
+    argCount :: Int
+    argCount = List.length args
+
+    updateContext :: _ -> Endomorphism RenderContext
+    updateContext { yOffset, start } ctx =
       ctx
-        { slices = (Arary.replicate argCount heights) <> ctx.slices
-        , yOffsets = Array.replicate argCount yOffset <> ctx.yOffsets
-        , starts = Array.replicate argCount start <> ctx.starts
+        { scopes = HashMap.insert scope { measures: heights, y: yOffset } ctx.scopes
+        , starts = NameMap.fromBound (Array.replicate argCount start) <> ctx.starts
         }
 
-  algebra (Call { position } mkFunc mkArg) = do
+  algebra (Call { position, inScope } mkFunc mkArg) = do
     -- Get stuff from the environment
-    slices <- ask <#> _.slices
-    yOffset <- getYOffset 0
+    yOffset <- getYOffset inScope
     --
     function <- mkFunc
     argument <- local _ { xStart = function.maxX } mkArg
+    lineY <- getY inScope position 1 <#> \y -> y + yOffset + linePadding
     let
-      lineY :: Int
-      lineY = yOffset + linePadding + getY 0 position 1 slices
-
       sameDirection :: Boolean
       sameDirection = compare argument.lineY function.lineY == compare function.lineY lineY
 
@@ -252,13 +254,6 @@ render (Tuple rootMeasures layout) =
         }
     pure renderList
 
-getStart :: forall r. Int -> Run ( reader :: READER RenderContext | r ) Int
-getStart x = ado
-  starts <- ask <#> _.starts
-  in case Array.index starts x of
-    Just r -> r
-    Nothing -> 0
-
 -- | Given a point on a call diagonal, calculate the position on the other side
 callDiagonalOpposite :: Boolean -> Vector.Vec2 -> Vector.Vec2
 callDiagonalOpposite up = Vector.add offset
@@ -273,23 +268,23 @@ callDiagonalOpposite up = Vector.add offset
 
 -- | Get the y position based on an index and a (relative) position.
 getY ::
-  (Label "index" => Int) ->
+  ScopeId ->
   (Label "position" => Int) ->
-  (Label "height" => Int) ->
-  Array YMeasures -> Int
-getY index position height slices = unitHeight * units + unitHeight / 2 * (left - height)
-  where
-  (Tuple units left) =
-    foldrWithIndex
-      ( \index' height' result@(Tuple heightResult availibleResult) -> case compare position index' of
-          LT -> result
-          EQ -> Tuple heightResult height'
-          GT -> Tuple (heightResult + height') availibleResult
-      )
-      (Tuple 0 1)
-      $ unwrap
-      $ fromMaybe mempty
-      $ Array.index slices index
+  (Label "height" => Int) -> RenderM Int
+getY scope position height = do
+  heights <- ask <#> _.scopes
+  { measures } <- note (MissingScope scope) $ HashMap.lookup scope heights
+  let
+    (Tuple units left) =
+      foldrWithIndex
+        ( \index' height' result@(Tuple heightResult availibleResult) -> case compare position index' of
+            LT -> result
+            EQ -> Tuple heightResult height'
+            GT -> Tuple (heightResult + height') availibleResult
+        )
+        (Tuple 0 1)
+        $ unwrap measures
+  pure $ unitHeight * units + unitHeight / 2 * (left - height)
 
 mkDiagonal ::
   { y0 :: Int
@@ -336,17 +331,32 @@ mkDiagonal { y0, y1, x, tanAngle, diagonalWidth } = { points, x1: end' !! d0, of
     ]
 
 -- | Retrive an arbitrary y offset from the current environment
-getYOffset :: Int -> RenderM Int
-getYOffset at = ask <#> (_.yOffsets >>> flip Array.index at >>> fromMaybe 0)
+getYOffset :: ScopeId -> RenderM Int
+getYOffset scope = ask >>= (_.scopes >>> HashMap.lookup scope >>> note (MissingScope scope) >>> map _.y)
+
+getStart :: Name -> RenderM Int
+getStart name = ask >>= (_.starts >>> NameMap.lookup name >>> note (NotInScope name))
+
+-- | Introduce a bunch of free variables into scope
+withFreeVars :: forall a. Int -> HashMap.HashMap String a -> RenderM ~> RenderM
+withFreeVars start vars m =
+  flip local m \ctx ->
+    ctx
+      { starts = ctx.starts <> NameMap.fromFree (start <$ vars)
+      }
 
 -- | Run a computation in the render monad.
-runRenderM :: forall a. RenderM a -> a
-runRenderM = runReader ctx >>> extract
+runRenderM :: forall a. RenderM a -> Either RenderingError a
+runRenderM = runReader ctx >>> runExcept >>> extract
   where
   ctx :: RenderContext
   ctx =
-    { slices: []
-    , yOffsets: []
-    , starts: []
-    , xStart: 0
+    { xStart: 0
+    , starts: mempty
+    , scopes: mempty
     }
+
+--------- Typeclass instances
+instance showRenderingError :: Show RenderingError where
+  show (NotInScope name) = show name <> " not in scope"
+  show (MissingScope scope) = "Cannot find data related to scope " <> show scope

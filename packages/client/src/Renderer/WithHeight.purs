@@ -8,16 +8,18 @@ module Lunarflow.Renderer.WithHeight
 
 import Lunarlude
 import Data.Array as Array
+import Data.HashMap as HashMap
 import Lunarflow.Array (maxZip)
 import Lunarflow.Ast (AstF(..), call, lambda, var)
 import Lunarflow.Layout (LayoutLike, LayoutLikeF)
-import Lunarflow.LayoutM (ScopeId)
+import Lunarflow.LayoutM (Binder)
 import Prim.Row as Row
 import Record as Record
 
+-- TODO: clean this up
 -- | The base functor for YLayouts.
 type YLayoutLikeF v c a l
-  = LayoutLikeF Int v c a ( isRoot :: Boolean, scope :: ScopeId, heights :: YMeasures | l )
+  = LayoutLikeF Int v c a ( isRoot :: Boolean, heights :: YMeasures | l )
 
 -- | YLayouts are layouts which keep track of the maximum height of each line
 type YLayoutLike v c a l
@@ -36,24 +38,24 @@ newtype YMeasures
 
 -- | Add height data to a layout.
 withHeights ::
-  forall v l a c.
+  forall v c a l.
   Row.Lacks "heights" l =>
-  -- TODO: clean this up
-  LayoutLike Int v c a ( isRoot :: Boolean, scope :: ScopeId | l ) ->
+  LayoutLike Int v c a ( isRoot :: Boolean | l ) ->
   Tuple YMeasures (YLayoutLike v c a l)
 withHeights =
   cata case _ of
     -- The heights of vars will be handled inside the lambda which binds them
-    Var varData -> Tuple mempty $ var varData
+    Var varData -> Tuple (fromFreeTerms varData.freeTerms) $ var varData
     -- To measure calls we just merge the measures of the function and argument and add one more row for the result.
-    Call data' (Tuple functionMeasures function) (Tuple argumentMeasures argument) -> Tuple measures yCall
+    Call callData (Tuple functionMeasures function) (Tuple argumentMeasures argument) ->
+      Tuple measures
+        $ call callData function argument
       where
-      yCall = call data' function argument
-
       measures =
-        createMeasure { position: data'.position, height: 1 } -- The row for the result
+        createMeasure { position: callData.position, height: 1 } -- The row for the result
           <> functionMeasures
           <> argumentMeasures
+          <> fromFreeTerms callData.freeTerms
     Lambda lambdaData (Tuple nonVarMeasures body) ->
       Tuple measures $ flip lambda body
         $ Record.insert _heights bodyMeasures lambdaData
@@ -67,7 +69,7 @@ withHeights =
       measures =
         createMeasure
           { position: lambdaData.position
-          , height: totalHeight bodyMeasures + 1
+          , height: totalHeight bodyMeasures + 2
           }
 
 -- | Make a value of type YMeasures which holds a measure of an arbitrary height at an arbitrary position
@@ -78,13 +80,26 @@ createMeasure { position, height } = YMeasures $ Array.snoc (Array.replicate pos
 totalHeight :: YMeasures -> Int
 totalHeight = unwrap >>> sum
 
+-- | Maeasure a map of free variables
+fromFreeTerms :: HashMap.HashMap String (Binder Int) -> YMeasures
+fromFreeTerms =
+  foldrWithIndex
+    (\index { position } previous -> createMeasure { position, height: 1 } <> previous)
+    mempty
+
 ---------- Typeclass instances
 derive instance newtypeYMeasures :: Newtype YMeasures _
 
 instance semigroupYMeasures :: Semigroup YMeasures where
   append (YMeasures arr) (YMeasures arr') = YMeasures $ maxZip 0 0 arr arr' <#> uncurry max
 
-derive newtype instance monoidYMeasures :: Monoid YMeasures
+instance monoidYMeasures :: Monoid YMeasures where
+  mempty = YMeasures []
+
+derive instance genericYMeasures :: Generic YMeasures _
+
+instance debugYMeasures :: Debug YMeasures where
+  debug = genericDebug
 
 ---------- SProxies
 _heights :: SProxy "heights"

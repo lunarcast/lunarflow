@@ -1,66 +1,11 @@
 module Main where
 
 import Prelude
-import Concur.Core (Widget)
-import Concur.React (HTML)
-import Concur.React.DOM as D
-import Concur.React.Props as P
 import Concur.React.Run (runWidgetInDom)
-import Concur.React.Widgets (textInputWithButton)
-import Control.MultiAlternative (orr)
-import Control.Plus (empty)
-import Data.Bifunctor (lmap)
-import Data.Either (Either(..), either)
-import Data.Generic.Rep (class Generic)
-import Data.Generic.Rep.Show (genericShow)
-import Data.List as List
-import Data.Map as Map
-import Data.Maybe (Maybe(..))
-import Data.Nullable as Nullable
-import Data.Tuple (Tuple(..), snd)
 import Effect (Effect)
-import Effect.Class (liftEffect)
-import Effect.Ref as Ref
-import Graphics.Canvas (CanvasElement, Context2D, restore, save)
-import Lunarflow.Ast (withDebrujinIndices)
-import Lunarflow.Ast.Grouped (groupExpression)
 import Lunarflow.Component.Editor (editor)
-import Lunarflow.ErrorStack (ErrorStack)
-import Lunarflow.Function ((|>))
-import Lunarflow.Geometry.Foreign (Geometry, boundsImpl, fromShape, renderGeometry)
-import Lunarflow.Layout (ScopedLayout, addIndices, markRoot, unscopeLayout)
-import Lunarflow.LayoutM (LayoutError, LayoutState, ScopeId(..), runLayoutMWithState)
-import Lunarflow.Parser (parseLambdaCalculus)
-import Lunarflow.Reduction (tryEtaReducing)
-import Lunarflow.Render (render, runRenderM)
-import Lunarflow.Renderer.Canvas (fillScreen, fitIntoBounds)
-import Lunarflow.Renderer.Constants (colors)
-import Lunarflow.Renderer.WithHeight (withHeights)
 
--- | The state which the concur widget keeps track of.
-type State
-  = { error :: Maybe String
-    , value :: String
-    , layout :: Maybe (Tuple LayoutState ScopedLayout)
-    }
-
--- | Initial config we pass to the concur widget.
-type Input
-  = { ref :: Ref.Ref Geometry
-    , render :: Effect Unit
-    }
-
--- | Actions our ui can emit
-data Action
-  = NewExpression String
-  | EtaReduce
-  | RenderLayout
-
--- | Possible errors which can occur while generating the geometry.
-data Error
-  = ParsingError String
-  | LayoutCreationError (ErrorStack String LayoutError)
-
+{-
 -- | This takes a lambda calculus expression and tries to build an unscoped layout out of it.
 mkScopedLayout :: String -> Either Error (Tuple LayoutState ScopedLayout)
 mkScopedLayout text = do
@@ -115,9 +60,9 @@ handleAction input state@{ value, error, layout } = case _ of
     Just (Tuple layoutState scopedLayout) ->
       flip (handleAction input) RenderLayout
         { error:
-          either (show >>> Just)
-            (const Nothing)
-            layout'
+            either (show >>> Just)
+              (const Nothing)
+              layout'
         , value
         , layout: either (const Nothing) Just layout'
         }
@@ -126,9 +71,9 @@ handleAction input state@{ value, error, layout } = case _ of
   NewExpression text ->
     flip (handleAction input) RenderLayout
       { error:
-        either (show >>> Just)
-          (const Nothing)
-          layout'
+          either (show >>> Just)
+            (const Nothing)
+            layout'
       , value: text
       , layout: either (const Nothing) Just layout'
       }
@@ -177,14 +122,6 @@ textBox input state'@{ value, error, layout } = do
 -- | The expression the website loads by default.
 initialExpression :: String
 initialExpression = """\f a b. f b a"""
-
+-}
 main :: Effect Unit
 main = runWidgetInDom "root" editor
-
----------- Tyeclass instances
-derive instance genericError :: Generic Error _
-
-instance showError :: Show Error where
-  show a = case a of
-    ParsingError err -> err
-    _ -> genericShow a

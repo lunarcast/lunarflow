@@ -1,21 +1,22 @@
 module Lunarflow.Tea where
 
 import Prelude
-import Effect (Effect)
-import Effect.Class (class MonadEffect, liftEffect)
-import Run (EFFECT, Run, runBaseEffect)
+import Effect.Aff (Aff)
+import Effect.Aff.Class (class MonadAff, liftAff)
+import Run (AFF, EFFECT, Run, runBaseAff')
 import Run.State (STATE, execState)
 
 type TeaM s
   = Run
-      ( effect :: EFFECT
+      ( aff :: AFF
+      , effect :: EFFECT
       , state :: STATE s
       )
 
 -- | The Elm Architecture
 tea ::
   forall a s m.
-  MonadEffect m =>
+  MonadAff m =>
   s -> -- Initial state
   (s -> m a) -> -- Render function
   (a -> TeaM s Unit) -> -- Action handler
@@ -23,7 +24,7 @@ tea ::
 tea initialState render update = go initialState
   where
   go :: forall x. s -> m x
-  go state = render state >>= (update >>> execTeaM state >>> liftEffect >=> go)
+  go state = render state >>= (update >>> execTeaM state >>> liftAff >=> go)
 
-execTeaM :: forall s a. s -> TeaM s a -> Effect s
-execTeaM state = execState state >>> runBaseEffect
+execTeaM :: forall s a. s -> TeaM s a -> Aff s
+execTeaM state = execState state >>> runBaseAff'
