@@ -8,7 +8,6 @@
 module Lunarlude
   ( module Prelude
   , module Lunarflow.Function
-  , module Lunarflow.Mu
   , module Data.Symbol
   , module Data.Tuple
   , module Data.Foldable
@@ -41,19 +40,21 @@ module Lunarlude
   , module Data.Functor
   , module Effect
   , module Type.Row
+  , module Lunarflow.Debug
+  , module Data.Debug.Class
+  , module Data.Functor.Mu
   ) where
 
 import Prelude
-
 import Control.MonadZero (guard)
 import Control.Plus ((<|>), empty)
-import Data.Bifunctor (lmap, rmap)
-import Data.Debug (class Debug, genericDebug)
+import Data.Bifunctor (lmap, rmap, bimap)
 import Data.Either (Either(..), either)
 import Data.Foldable (class Foldable, fold, foldl, foldr, product, sum)
 import Data.FoldableWithIndex (class FoldableWithIndex, foldlWithIndex, foldrWithIndex)
 import Data.Function (on)
 import Data.Functor (voidLeft, voidRight, void)
+import Data.Functor.Mu (Mu(..))
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Int (toNumber, floor)
@@ -68,14 +69,16 @@ import Data.Ord (abs)
 import Data.Symbol (SProxy(..))
 import Data.Traversable (class Traversable, for, for_, traverse, traverse_, sequence, sequence_, minimumBy)
 import Data.TraversableWithIndex (class TraversableWithIndex, forWithIndex)
-import Data.Tuple (Tuple(..), fst, snd, uncurry, curry)
+import Data.Tuple (Tuple(..), fst, snd, uncurry, curry, swap)
 import Data.Unfoldable (class Unfoldable, replicate)
+import Effect (Effect)
 import Effect.Aff (Milliseconds(..), delay, launchAff_, launchAff)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
+import Lunarflow.Debug (debugSpy, myDebug, showPretty)
+import Data.Debug (class Debug, Repr, genericDebug, debug)
+import Data.Debug.Class (TacitRepr)
 import Lunarflow.Function (Endomorphism, (|>))
-import Lunarflow.Mu (Mu(..), TacitRepr)
 import Matryoshka (class Corecursive, class Recursive, Algebra, AlgebraM, Coalgebra, CoalgebraM, GAlgebra, GAlgebraM, ana, anaM, cata, cataM, para, embed, project)
 import Type.Data.Row (RProxy(..))
-import Effect (Effect)
 import Type.Row (type (+))
