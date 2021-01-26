@@ -40,9 +40,10 @@ let additions =
           , "generics-rep"
           , "datetime"
           , "enums"
+          , "unordered-collections"
           ]
-        , repo = "https://github.com/hdgarrood/purescript-debugged"
-        , version = "744498226da3c9b5b37c69771cc0378a65cc8189"
+        , repo = "https://github.com/Mateiadrielrafael/purescript-debugged"
+        , version = "master"
         }
       , undefined-is-not-a-problem =
         { dependencies =
@@ -68,4 +69,4 @@ let packages =
       with lunarflow-core = ./packages/core/spago.dhall as Location
       with lunarflow-geometry = ./packages/geometry/spago.dhall as Location
 
-in  packages // overrides // additions
+in  packages ⫽ overrides ⫽ additions

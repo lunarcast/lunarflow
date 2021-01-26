@@ -25,6 +25,9 @@ module Lunarflow.LayoutM
   , while
   , getVarPosition
   , insideScope
+  , protect
+  , attractTo
+  , attractToIndex
   ) where
 
 import Lunarlude
@@ -188,12 +191,31 @@ unscopePosition position@(Position (PositionPointer index) scope) =
       Just absolute -> pure absolute
       Nothing -> throw $ MissingPosition list position
 
+-- | Run a computation within a given scope
 insideScope :: ScopeId -> LayoutM ~> LayoutM
 insideScope scope = local $ Record.set _currentScope scope
+
+-- | Run a computation in a context where an arbitrary set of positions are protected.
+protect :: Set.Set Position -> LayoutM ~> LayoutM
+protect inputs = local (\a -> a { protected = a.protected <> inputs })
 
 -- | Add more context data to errors.
 while :: String -> LayoutM ~> LayoutM
 while place = expand >>> Stacked.while place
+
+-- | Run a computation in a context "attracted" to an arbitrary position pointer.
+attractToIndex :: PositionPointer -> LayoutM ~> LayoutM
+attractToIndex near = local (_ { near = near })
+
+-- | Run a computation in a context "attracted" to an arbitrary position.
+attractTo :: Position -> LayoutM ~> LayoutM
+attractTo (Position near scope) m = do
+  theCurrentScope <- currentScope
+  let
+    update
+      | scope == theCurrentScope = const near
+      | otherwise = identity
+  flip local m $ over (prop _near) update
 
 ---------- Typeclass instances
 derive instance eqScopeId :: Eq ScopeId
@@ -261,3 +283,6 @@ instance showLayoutError :: Show LayoutError where
 ---------- SProxies
 _currentScope :: SProxy "currentScope"
 _currentScope = SProxy
+
+_near :: SProxy "near"
+_near = SProxy

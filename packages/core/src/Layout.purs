@@ -19,9 +19,9 @@ import Data.List as List
 import Data.Map as Map
 import Data.Set as Set
 import Lunarflow.Ast (AstF(..), Name(..), call, lambda, var)
-import Lunarflow.Ast.Grouped (GroupedLikeF, GroupedLike, references)
+import Lunarflow.Ast.Grouped (GroupedLike, GroupedLikeF, references)
 import Lunarflow.ErrorStack (ErrorStack(..))
-import Lunarflow.LayoutM (AbsolutePosition, Binder, LayoutM, Line, LineRep, Position(..), PositionPointer(..), ScopeId(..), currentScope, freshColor, getIndexMap, getVarPosition, insideScope, lookupBinders, missingPosition, unscopePosition, while)
+import Lunarflow.LayoutM (AbsolutePosition, Binder, LayoutM, Line, LineRep, Position(..), PositionPointer(..), ScopeId(..), attractTo, currentScope, freshColor, getIndexMap, getVarPosition, insideScope, lookupBinders, missingPosition, protect, unscopePosition, while)
 import Lunarflow.List (indexed)
 import Prim.Row as Row
 import Record as Record
@@ -153,37 +153,18 @@ generateLayout =
         $ withFreeAnnotations varData \freeTerms -> ado
             { position, color } <- lookupBinders varData.name
             in var $ Record.union { position, color, freeTerms } $ Record.delete _freeTerms varData
-    Call data' (Tuple _ layoutFunction) (Tuple groupedArgument layoutArgument) ->
+    Call data' tupleFunction@(Tuple _ layoutFunction) tupleArgument@(Tuple groupedArgument layoutArgument) ->
       while "adding indices to a call"
         $ withFreeAnnotations data' \freeTerms -> do
-            let
-              -- This type annotation is here so the compiler
-              -- knows which Unfoldable instance to use.
-              vars :: Array Name
-              vars = Set.toUnfoldable $ references groupedArgument
-            -- This holds all the variables referenced inside the argument of the call
-            inArgument <- Set.fromFoldable <$> for (onlyBound vars) getVarPosition
-            -- When we draw a call, we draw the function first and then the argument.
-            -- We don't want the space taken by the variables in the argument to be occupied
-            -- So we basically inform the call not to touch those spaces.
-            function <- protect inArgument layoutFunction
-            scope <- currentScope
-            let
-              functionPosition@(Position functionIndex functionScope) = getPosition function
-
-              -- PureScript doesn't genralize let bindings 
-              -- so we have to write this type definition ourselves.
-              nearFunction :: LayoutM ~> LayoutM
-              nearFunction
-                | functionScope == scope = attractTo functionIndex
-                | otherwise = identity
-            argument <- protect (Set.singleton functionPosition) $ nearFunction layoutArgument
+            Tuple function argument <- placeExpressions tupleFunction tupleArgument
             let
               argumentPosition = getPosition argument
 
+              functionPosition = getPosition function
+
               except = Set.fromFoldable [ functionPosition, argumentPosition ]
             constraint <- constrain functionPosition argumentPosition
-            position <- nearFunction $ ask <#> _.near >>= placeExpression { except, constraint }
+            position <- attractTo functionPosition $ ask <#> _.near >>= placeExpression { except, constraint }
             let
               data'' = Record.union { position, color: getColor function, freeTerms } $ Record.delete _freeTerms data'
             pure $ call data'' function argument
@@ -222,21 +203,18 @@ generateLayout =
 
       varCount = List.length vars
   where
-  onlyBound :: Array Name -> Array Name
-  onlyBound =
-    Array.filter case _ of
-      Bound i -> true
-      _ -> false
-
   withFreeAnnotations :: forall r b. Record (FreeRootsRep r) -> (HashMap.HashMap String (Binder Position) -> LayoutM b) -> LayoutM b
   withFreeAnnotations vars m = do
     varPositionsAndColors <-
-      HashMap.fromArray
-        <$> for (Array.fromFoldable vars.freeTerms) \name -> ado
-            color <- freshColor
-            position <- ask <#> _.near >>= placeExpression { except: Set.empty, constraint: Everywhere }
-            in Tuple name { color, position }
+      foldl go (pure HashMap.empty) (Array.fromFoldable vars.freeTerms)
     flip local (m varPositionsAndColors) $ over (prop _free) $ HashMap.union varPositionsAndColors
+    where
+    go m' name = do
+      color <- freshColor
+      ctx <- ask
+      position <- ask <#> _.near >>= placeExpression { except: Set.empty, constraint: Everywhere }
+      varMap <- protect (Set.singleton position) m'
+      pure $ HashMap.insert name { color, position } varMap
 
 -- | Search for the optimal location to put something at.
 findLocation ::
@@ -256,7 +234,7 @@ findLocation { constraint, positionIndex, positions, except, scope } = ado
   -- 
   let
     allowed :: PositionPointer -> Boolean
-    allowed x = not $ Set.member x except
+    allowed x = not (Set.member x except) && x /= positionIndex
 
     passesConstraint :: Int -> Boolean
     passesConstraint x = case constraint of
@@ -292,26 +270,27 @@ placeExpression ::
   } ->
   PositionPointer ->
   LayoutM Position
-placeExpression { except, constraint } positionIndex = do
-  ctx <- ask
-  positions <- currentIndexList
-  result <-
-    findLocation
-      { constraint
-      , positionIndex
-      , positions
-      , scope: ctx.currentScope
-      , except:
-          (ctx.protected <> except)
-            |> Set.mapMaybe \(Position index scope) -> do
-                guard (scope == ctx.currentScope)
-                Just index
-      }
-  case result of
-    At index -> pure $ Position index ctx.currentScope
-    NextTo y -> do
-      shiftLines ctx.currentScope { past: y, amount: 1 }
-      createPosition (y + 1) ctx.currentScope
+placeExpression { except, constraint } positionIndex =
+  while "placing an expression" do
+    ctx <- ask
+    positions <- currentIndexList
+    result <-
+      findLocation
+        { constraint
+        , positionIndex
+        , positions
+        , scope: ctx.currentScope
+        , except:
+            (ctx.protected <> except)
+              |> Set.mapMaybe \(Position index scope) -> ado
+                  guard (scope == ctx.currentScope)
+                  in index
+        }
+    case result of
+      At index -> pure $ Position index ctx.currentScope
+      NextTo y -> do
+        shiftLines ctx.currentScope { past: y, amount: 1 }
+        createPosition (y + 1) ctx.currentScope
 
 -- | Create and push a new position into a map.
 createPosition :: Int -> ScopeId -> LayoutM Position
@@ -397,15 +376,6 @@ markRoot =
       Lambda lambdaData body -> flip lambda body $ Record.insert _isRoot false lambdaData
 
 ---------- Internal helpers
--- | Run a computation in a context where 
--- | an arbitrary set of positions is protected.
-protect :: Set.Set Position -> LayoutM ~> LayoutM
-protect inputs = local (\a -> a { protected = a.protected <> inputs })
-
--- | Run a computation in a context "attracted" to an arbitrary position.
-attractTo :: PositionPointer -> LayoutM ~> LayoutM
-attractTo near = local (_ { near = near })
-
 -- | Get the position an expression already has.
 getPosition :: forall p v c a l. LayoutLike p v c a l -> p
 getPosition layout = case project layout of
@@ -436,6 +406,13 @@ currentIndexList = do
   ctx <- ask
   getIndexMap ctx.currentScope
 
+-- | Filter out all the free variables from an array.
+onlyBound :: Array Name -> Array Name
+onlyBound =
+  Array.filter case _ of
+    Bound i -> true
+    _ -> false
+
 -- | Find the correct way to constrain where the result of a call can be placed.
 constrain :: Position -> Position -> LayoutM LocationConstraint
 constrain functionPosition@(Position _ functionScope) argumentPosition@(Position _ argumentScope) =
@@ -451,6 +428,69 @@ constrain functionPosition@(Position _ functionScope) argumentPosition@(Position
         Below
       else
         Above
+
+-- | Check if an expression has a high attraction towards some attraction point.
+isAttracted :: forall v c a l. GroupedLike v c a l -> Boolean
+isAttracted =
+  project
+    >>> case _ of
+        -- NOTE: this assumes the name is in scope
+        Var { name: Bound _ } -> true
+        Call _ function argument -> true
+        _ -> false
+
+-- | Place 2 expressions (usually an argument and the function being called) 
+-- | such that we keep ourselves as attracted to the attraction point as possible
+placeExpressions ::
+  forall v c a l v' c' a' l'.
+  Row.Lacks "args" l' =>
+  Tuple (GroupedLike v' c' a' l') (LayoutM (LayoutLike Position v c a l)) ->
+  Tuple (GroupedLike v' c' a' l') (LayoutM (LayoutLike Position v c a l)) ->
+  LayoutM (Tuple (LayoutLike Position v c a l) (LayoutLike Position v c a l))
+placeExpressions a@(Tuple groupedFirst layoutFirst) b@(Tuple groupedSecond layoutSecond)
+  | not (isAttracted groupedFirst) && isAttracted groupedSecond = swap <$> placeExpressions b a
+  | otherwise = do
+    { free } <- ask
+    let
+      vars =
+        references groupedSecond
+          |> Set.filter filterVarSet
+          |> Array.fromFoldable
+        where
+        filterVarSet = case _ of
+          Bound i -> true
+          Free name -> HashMap.member name free
+    -- This holds all the variables referenced inside the second expression 
+    -- (usully the argument of a call)
+    inSecond <- Set.fromFoldable <$> for vars getVarPosition
+    -- When we draw a call, we draw the function first and then the argument.
+    -- We don't want the space taken by the variables in the argument to be occupied
+    -- So we basically inform the call not to touch those spaces.
+    -- ( this is of course generalized for any 2 expressions )
+    first <- protect inSecond layoutFirst
+    scope <- currentScope
+    let
+      firstPosition = getPosition first
+    -- place down the second expression 
+    -- ( usually the argument in a call )
+    second <- protect (Set.insert firstPosition $ takenPositions first) $ attractTo firstPosition layoutSecond
+    pure $ Tuple first second
+
+-- | Collects all the positions occupied by free variables
+takenPositions :: forall v c a l. LayoutLike Position v c a l -> Set.Set Position
+takenPositions =
+  cata case _ of
+    Lambda _ body -> body
+    Var { freeTerms } -> freePositions freeTerms
+    Call { freeTerms } function argument -> function <> argument <> (freePositions freeTerms)
+  where
+  freePositions = map _.position >>> Set.fromFoldable
+
+---------- Typeclass instances
+derive instance genericLocationConstraint :: Generic LocationConstraint _
+
+instance debugLocationConstraint :: Debug LocationConstraint where
+  debug = genericDebug
 
 ---------- SProxies
 _indexMap :: SProxy "indexMap"
