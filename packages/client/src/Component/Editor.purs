@@ -88,10 +88,10 @@ editor = do
               , mkFunction "one" """\s z. s z"""
               , mkFunction "succ" """\n s z. s (n s z)"""
               , mkFunction "three" """\s z. s (s (s z))"""
-              , mkFunction "four" """succ three"""
+              , mkFunction "four" """wow (three (succ three))"""
               ]
         }
-    , selectedExpression: Just "identity"
+    , selectedExpression: Just "four"
     , context: Nothing
     , initializing: true
     , resizeBus: _
@@ -189,9 +189,8 @@ handleAction = case _ of
               ( \a ->
                   unsafeCrashWith $ show a
               )
-          -- |> debugSpy
-          
           |> withHeights
+          |> debugSpy
           |> render
           |> runRenderM
           |> flip either identity
