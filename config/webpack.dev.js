@@ -46,5 +46,3 @@ module.exports = merge(common, {
     ]
   }
 })
-
-console.log(module.exports)
