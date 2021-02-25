@@ -1,5 +1,7 @@
 # Lunarflow
 
+> This project is currently on hold. I might or might not resume development.
+
 Tool for beginners to learn lambda calculus using an intuitive (or so I hope) visualisations.
 
 This is still in a super early stage, so maybe start this repo and come back in a few months :D
